@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meal Planner with LP Solver</title>
+    <script src="https://unpkg.com/javascript-lp-solver/prod/solver.js"></script>
+</head>
+<body>
+    <h1>Meal Planner with LP Solver</h1>
+    <button onclick="solveMealPlan()">Generate Optimal Meal Plan</button>
+    <h2>Meal Plan:</h2>
+    <div id="meal-plan"></div>
+
+    <script>
+        const foods = [
+            { name: "Chicken Breast", calories: 200, fat: 5, carbs: 0, protein: 40, cost: 2, min_serving: 1, max_serving: 5, required: false },
+            { name: "Rice", calories: 300, fat: 1, carbs: 60, protein: 5, cost: 0.5, min_serving: 1, max_serving: 5, required: false },
+            { name: "Broccoli", calories: 50, fat: 0, carbs: 10, protein: 3, cost: 1, min_serving: 1, max_serving: 3, required: true },
+            { name: "Avocado", calories: 160, fat: 15, carbs: 8, protein: 2, cost: 1.5, min_serving: 1, max_serving: 2, required: false }
+        ];
+
+        const calorieRange = { min: 1700, max: 1800 };
+        const fatRange = { min: 40, max: 50 };
+        const carbRange = { min: 100, max: 200 };
+        const proteinRange = { min: 195, max: 205 };
+
+        function solveMealPlan() {
+            // Define the LP problem
+            let problem = {
+                "optimize": "cost",
+                "opType": "min",
+                "constraints": {
+                    "calories": { "min": calorieRange.min, "max": calorieRange.max },
+                    "fat": { "min": fatRange.min, "max": fatRange.max },
+                    "carbs": { "min": carbRange.min, "max": carbRange.max },
+                    "protein": { "min": proteinRange.min, "max": proteinRange.max }
+                },
+                "variables": {},
+                "ints": []
+            };
+
+            // Add each food item as a variable in the LP problem
+            foods.forEach(food => {
+                problem.variables[food.name] = {
+                    "calories": food.calories / 2,
+                    "fat": food.fat / 2,
+                    "carbs": food.carbs / 2,
+                    "protein": food.protein / 2,
+                    "cost": food.cost / 2
+                };
+                problem.ints[food.name] = 1
+            });
+
+            // Add bounds on servings (min_serving and max_serving)
+            foods.forEach(food => {
+                problem.constraints[`${food.name}_servings`] = { "min": food.min_serving * 2 * 0, "max": (food.max_serving * 2) };
+            });
+
+            // Solve the problem using the solver
+            const solution = solver.Solve(problem);
+            console.log(solution)
+
+            displayMealPlan(solution);
+        }
+
+        function displayMealPlan(solution) {
+            const mealPlanDiv = document.getElementById('meal-plan');
+            mealPlanDiv.innerHTML = ''; // Clear previous result
+
+            let totalCalories = 0, totalFat = 0, totalCarbs = 0, totalProtein = 0, totalCost = 0;
+            foods.forEach(food => {
+                const solvedServings = solution[food.name];
+                if (solvedServings && solvedServings > 0) {
+                    const servings = solvedServings / 2 // Later food.step
+                    mealPlanDiv.innerHTML += `${food.name}: ${(servings).toFixed(1)} servings<br>`;
+                    totalCalories += food.calories * servings;
+                    totalFat += food.fat * servings;
+                    totalCarbs += food.carbs * servings;
+                    totalProtein += food.protein * servings;
+                    totalCost += food.cost * servings;
+                }
+            });
+
+            mealPlanDiv.innerHTML += `<br><strong>Total:</strong><br>`;
+            mealPlanDiv.innerHTML += `Calories: ${totalCalories}, Fat: ${totalFat}g, Carbs: ${totalCarbs}g, Protein: ${totalProtein}g, Cost: $${totalCost.toFixed(2)}<br>`;
+        }
+    </script>
+</body>
+</html>

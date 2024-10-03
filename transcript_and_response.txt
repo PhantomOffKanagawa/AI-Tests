@@ -1,0 +1,12 @@
+Transcript: Prototype a site that uses to-do items similar to a site like to-do ist, but it allows relationships of the to-do. So a to-do might have a requirement for a different to-do to be completed. For it can be completed, the site should use Bootstrap. It should be a basic HTML CSS JS site.
+Action: prototype
+LLM Response: LLM response to: Outline the steps to start the following idea, including code examples in the mentioned languages:
+
+Prototype a site that uses to-do items similar to a site like to-do ist, but it allows relationships of the to-do. So a to-do might have a requirement for a different to-do to be completed. For it can be completed, the site should use Bootstrap. It should be a basic HTML CSS JS site.
+--------------------------------------------------
+Transcript: Prototype a Python script that accepts a response from a large language model such as chatgbt for creating a prototype. The response from the chatgbt will include different files with specified names and text. It should be able to automatically create those files and add that text. The response from the chatgbt will include different files with specified names and text.
+Action: prototype
+LLM Response: LLM response to: Outline the steps to start the following idea, including code examples in the mentioned languages:
+
+Prototype a Python script that accepts a response from a large language model such as chatgbt for creating a prototype. The response from the chatgbt will include different files with specified names and text. It should be able to automatically create those files and add that text. The response from the chatgbt will include different files with specified names and text.
+--------------------------------------------------

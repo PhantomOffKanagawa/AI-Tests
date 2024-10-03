@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meal Planner CSP</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container { max-width: 800px; margin: auto; }
+        h1 { text-align: center; }
+        .food-item { margin-bottom: 10px; }
+    </style>
+    <script src="./csp.js"></script> <!-- Assuming csp.js is in the same directory -->
+</head>
+<body>
+    <div class="container">
+        <h1>Meal Planner with CSP</h1>
+        <button onclick="solveMealPlan()">Generate Optimal Meal Plan</button>
+        <h2>Meal Plan:</h2>
+        <div id="meal-plan"></div>
+    </div>
+
+    <script>
+        const foods = [
+            { name: "Chicken Breast", calories: 200, fat: 5, carbs: 0, protein: 40, cost: 2, min_serving: 1, max_serving: 3, required: true },
+            { name: "Rice", calories: 300, fat: 1, carbs: 60, protein: 5, cost: 0.5, min_serving: 1, max_serving: 5, required: false },
+            { name: "Broccoli", calories: 50, fat: 0, carbs: 10, protein: 3, cost: 1, min_serving: 1, max_serving: 3, required: false },
+            { name: "Avocado", calories: 160, fat: 15, carbs: 8, protein: 2, cost: 1.5, min_serving: 1, max_serving: 2, required: false }
+        ];
+
+        const calorieRange = { min: 500, max: 1200 };
+        const fatRange = { min: 20, max: 50 };
+        const carbRange = { min: 100, max: 200 };
+        const proteinRange = { min: 50, max: 150 };
+
+        function solveMealPlan() {
+            // Define variables for CSP (food servings)
+            let variables = {};
+            foods.forEach(food => {
+                variables[food.name] = Array.from({ length: food.max_serving - food.min_serving + 1 }, (_, i) => i + food.min_serving);
+            });
+
+            // Define constraints
+            let constraints = [];
+
+            // Calories, fat, carbs, protein constraints
+            constraints.push(["total", "calories", function(total, _) {
+                const totalCalories = foods.reduce((sum, food) => sum + food.calories * total[food.name], 0);
+                return totalCalories >= calorieRange.min && totalCalories <= calorieRange.max;
+            }]);
+            constraints.push(["total", "fat", function(total, _) {
+                const totalFat = foods.reduce((sum, food) => sum + food.fat * total[food.name], 0);
+                return totalFat >= fatRange.min && totalFat <= fatRange.max;
+            }]);
+            constraints.push(["total", "carbs", function(total, _) {
+                const totalCarbs = foods.reduce((sum, food) => sum + food.carbs * total[food.name], 0);
+                return totalCarbs >= carbRange.min && totalCarbs <= carbRange.max;
+            }]);
+            constraints.push(["total", "protein", function(total, _) {
+                const totalProtein = foods.reduce((sum, food) => sum + food.protein * total[food.name], 0);
+                return totalProtein >= proteinRange.min && totalProtein <= proteinRange.max;
+            }]);
+
+            // Required food constraint
+            foods.forEach(food => {
+                if (food.required) {
+                    constraints.push([food.name, "required", function(serving, _) {
+                        return serving >= food.min_serving;
+                    }]);
+                }
+            });
+
+            // Solve the CSP
+            let problem = {
+                variables: variables,
+                constraints: constraints,
+                cb: (assignments, unassigned) => {
+                    console.log(assignments);
+                },
+                timeStep: 1
+            };
+
+            let result = csp.solve(problem);
+            displayMealPlan(result);
+        }
+
+        function displayMealPlan(result) {
+            const mealPlanDiv = document.getElementById('meal-plan');
+            mealPlanDiv.innerHTML = ''; // Clear previous result
+
+            if (result === "FAILURE") {
+                mealPlanDiv.innerHTML = "<p>Could not generate a valid meal plan.</p>";
+                return;
+            }
+
+            let totalCalories = 0, totalFat = 0, totalCarbs = 0, totalProtein = 0, totalCost = 0;
+            foods.forEach(food => {
+                const servings = result[food.name];
+                mealPlanDiv.innerHTML += `${food.name}: ${servings} servings<br>`;
+                totalCalories += food.calories * servings;
+                totalFat += food.fat * servings;
+                totalCarbs += food.carbs * servings;
+                totalProtein += food.protein * servings;
+                totalCost += food.cost * servings;
+            });
+
+            mealPlanDiv.innerHTML += `<br><strong>Total:</strong><br>`;
+            mealPlanDiv.innerHTML += `Calories: ${totalCalories}, Fat: ${totalFat}g, Carbs: ${totalCarbs}g, Protein: ${totalProtein}g, Cost: $${totalCost.toFixed(2)}<br>`;
+        }
+    </script>
+</body>
+</html>
