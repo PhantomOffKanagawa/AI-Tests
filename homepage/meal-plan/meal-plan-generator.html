@@ -53,7 +53,7 @@
       <h1>Enhanced Meal Planner</h1>
       <div class="row">
         <div class="col-md-8 scrollable pb-5">
-          <h2>Meals</h2>
+          <h2>Meals ${{this.price.toFixed(2)}}</h2>
           <div v-for="(meal, mealIndex) in meals" :key="meal.name">
             <h3>{{ meal.name }}</h3>
             <draggable :list="meal.items" group="foods" class="meal-section">
@@ -277,6 +277,7 @@
               //   { id: 6, name: "Evening snack", items: [] },
             ],
             favoriteFoods: [],
+            price: 0.00
           };
         },
         computed: {
@@ -401,11 +402,23 @@
               0
             );
           },
+          totalPrice() {
+            return this.meals.reduce(
+              (sum, meal) =>
+                sum +
+                meal.items.reduce(
+                  (mealSum, item) => mealSum + item.cost * item.servings,
+                  0
+                ),
+              0
+            );
+          },
           updateRanges() {
             this.ranges.Calories.total = this.totalCalories();
             this.ranges.Protein.total = this.totalProtein();
             this.ranges.Carbs.total = this.totalCarbs();
             this.ranges.Fat.total = this.totalFat();
+            this.price = this.totalPrice();
           },
           getProgressMin(quota) {
             return Math.min(
