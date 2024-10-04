@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enhanced Meal Planner</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/vue/2.5.2/vue.min.js"></script>
+    <!-- CDNJS :: Sortable (https://cdnjs.com/) -->
+    <script src="//cdn.jsdelivr.net/npm/sortablejs@1.8.4/Sortable.min.js"></script>
+    <!-- CDNJS :: Vue.Draggable (https://cdnjs.com/) -->
+    <script src="//cdnjs.cloudflare.com/ajax/libs/Vue.Draggable/2.20.0/vuedraggable.umd.min.js"></script>
+    <script src="https://unpkg.com/javascript-lp-solver/prod/solver.js"></script>
+
+    <style>
+      body,
+      html {
+        height: 100%;
+        overflow: hidden;
+      }
+      .scrollable {
+        height: calc(100vh - 100px);
+        overflow-y: auto;
+      }
+      .meal-section {
+        min-height: 100px;
+        border: 1px dashed #ccc;
+        padding: 10px;
+        margin-bottom: 10px;
+      }
+      .food-item {
+        cursor: move;
+        padding: 1em;
+      }
+      .food-item.in-meal {
+        opacity: 0.5;
+      }
+      .sticky-button {
+        position: fixed;
+        bottom: 10px;
+        left: 15px;
+        z-index: 1000;
+        display: grid;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" class="container-fluid mt-4">
+      <h1>Enhanced Meal Planner</h1>
+      <div class="row">
+        <div class="col-md-8 scrollable">
+          <h2>Meals</h2>
+          <div v-for="(meal, mealIndex) in meals" :key="meal.name">
+            <h3>{{ meal.name }}</h3>
+            <draggable :list="meal.items" group="foods" class="meal-section">
+              <!-- <draggable :list="meal.items" group="foods" class="meal-section" > -->
+              <div
+                v-for="item in meal.items"
+                :key="item.name"
+                class="food-item"
+              >
+                {{ item.name }} - Calories: {{ item.calories }}, Carbs: {{
+                item.carbs }}g, Protein: {{ item.protein }}g, Fat: {{ item.fat
+                }}g
+                <button
+                  @click="removeFromMeal(item, meal)"
+                  class="btn btn-danger btn-sm float-end"
+                >
+                  Remove
+                </button>
+                <button
+                  @click="disableFood(item, meal)"
+                  class="btn btn-secondary btn-sm float-end me-2"
+                >
+                  Disable
+                </button>
+                <input
+                  type="number"
+                  v-model="item.servings"
+                  :min="item.min_serving"
+                  :max="item.max_serving"
+                  :step="item.serving_step"
+                  placeholder="Servings"
+                  @input="updateRanges"
+                />
+              </div>
+            </draggable>
+          </div>
+          <button
+            @click="startSolve()"
+            class="btn btn-secondary btn-sm float-end w-100"
+          >
+            Generate Meal Plan
+          </button>
+          <div id="meal-plan"></div>
+        </div>
+        <div class="col-md-4 scrollable">
+          <!-- <h2>Favorite Foods</h2>
+          <draggable :list="favoriteFoods" group="foods" class="list-group">
+            <div
+              v-for="item in favoriteFoods"
+              :key="item.name"
+              class="list-group-item food-item"
+              :class="{ 'in-meal': isInMeal(item) }"
+              @dragstart="updateServings(item)"
+            >
+              {{ item.name }} - Calories: {{ item.calories }}
+              <button
+                @click="removeFromFavorites(item)"
+                class="btn btn-warning btn-sm float-end"
+              >
+                Unfavorite
+              </button>
+            </div>
+          </draggable> -->
+
+          <h2>Required Foods</h2>
+          <draggable :list="requiredFoods" group="foods" class="list-group">
+            <div
+              v-for="item in requiredFoods"
+              :key="item.name"
+              class="list-group-item food-item"
+              :class="{ 'in-meal': isInMeal(item) }"
+              @dragstart="updateServings(item)"
+            >
+              {{ item.name }} - Calories: {{ item.calories }}
+              <button
+                @click="toggleRequired(item)"
+                class="btn btn-warning btn-sm float-end"
+              >
+                Unrequire
+              </button>
+            </div>
+          </draggable>
+
+          <h2 class="mt-4">All Foods</h2>
+          <draggable :list="enabledFoods" group="foods" class="list-group">
+            <div
+              v-for="(item, index) in enabledFoods"
+              :key="item.name"
+              class="list-group-item food-item"
+              :class="{ 'in-meal': isInMeal(item) }"
+              @dragstart="updateServings(item)"
+            >
+              {{ item.name }} - Calories: {{ item.calories }}
+              <!-- <button
+                @click="addToFavorites(item)"
+                class="btn btn-success btn-sm float-end"
+              >
+                Favorite
+              </button> -->
+              <button
+                @click="toggleRequired(item)"
+                class="btn btn-primary btn-sm float-end"
+              >
+                Require
+              </button>
+              <button
+                @click="disableFood(item)"
+                class="btn btn-secondary btn-sm float-end me-2"
+              >
+                Disable
+              </button>
+            </div>
+          </draggable>
+
+          <h2 class="mt-4">Disabled Foods</h2>
+          <ul class="list-group">
+            <li
+              v-for="item in disabledFoods"
+              :key="item.name"
+              class="list-group-item"
+            >
+              {{ item.name }} - Calories: {{ item.calories }}
+              <button
+                @click="enableFood(item)"
+                class="btn btn-info btn-sm float-end"
+              >
+                Enable
+              </button>
+            </li>
+          </ul>
+
+          <h2 class="mt-4">Nutrition Quota</h2>
+          <ul class="list-group">
+            <li class="list-group-item">
+              <div v-for="(quotas, key) in ranges" :key="key">
+                <label
+                  >{{ key.charAt(0).toUpperCase() + key.slice(1) }}: {{
+                  quotas.min }} / {{ quotas.total }} / {{ quotas.max }}</label
+                >
+                <div class="progress bg-light rounded">
+                  <div
+                    class="progress-bar"
+                    :class="getProgressColorMin(quotas)"
+                    :style="{ width: `${getProgressMin(quotas)}%` }"
+                  ></div>
+                  <div
+                    class="progress-bar"
+                    :class="getProgressColorMax(quotas)"
+                    :style="{ width: `${getProgressMax(quotas)}%` }"
+                  ></div>
+                </div>
+              </div>
+
+              <!-- Calories: {{ranges.calorieRange.min}} / {{ totalCalories }} /
+              {{ranges.calorieRange.max}}
+              <div class="w-100 rounded bg-light">
+                <div
+                  :class="{progress `${totalCalories > ranges.calorieRange.min ? 'bg-primary' : 'bg-success'}`}"
+                  :style="{ width: `${totalCalories /
+              ranges.calorieRange.max * 100}%` }"
+                ></div>
+              </div>
+            </li>
+            <label>
+              Calories: {{ranges.calorieRange.min}} / {{ totalCalories }} /
+              {{ranges.calorieRange.max}}</label
+            >
+            <li class="list-group-item">
+              Protein: {{ranges.proteinRange.min}}g / {{ totalProtein }}g /
+              {{ranges.proteinRange.max}}g
+            </li>
+            <li class="list-group-item">Carbs: {{ totalCarbs }}g / 225g</li>
+            <li class="list-group-item">Fat: {{ totalFat }}g / 56g</li> -->
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="sticky-button">
+        <!-- <button
+          class="btn btn-primary mt-1"
+          onclick='download(JSON.stringify(foods), "foods.json", "text/plain")'
+        >
+          Download JSON
+        </button> -->
+        <button
+          class="btn btn-primary mt-1"
+          @click='saveFoodsToLocalStorage()'
+        >
+          Save to Browser
+        </button>
+      </div>
+    </div>
+
+
+    <script>
+      const app = new Vue({
+        el: "#app",
+        data() {
+          return {
+            foods: {},
+            ranges: {},
+            meals: [
+              { id: 1, name: "Breakfast", items: [] },
+              //   { id: 2, name: "Morning snack", items: [] },
+              { id: 3, name: "Lunch", items: [] },
+              //   { id: 4, name: "Afternoon snack", items: [] },
+              { id: 5, name: "Dinner", items: [] },
+              //   { id: 6, name: "Evening snack", items: [] },
+            ],
+            favoriteFoods: [],
+          };
+        },
+        computed: {
+          enabledFoods() {
+            return Object.values(this.foods).filter(
+              (food) =>
+                food.enabled &&
+                !food.required &&
+                !this.favoriteFoods.includes(food) &&
+                !this.meals.some((meal) => meal.items.includes(food))
+            );
+          },
+          disabledFoods() {
+            return Object.values(this.foods).filter((food) => !food.enabled);
+          },
+          requiredFoods() {
+            return Object.values(this.foods).filter(
+              (food) =>
+                food.enabled &&
+                food.required &&
+                !this.meals.some((meal) => meal.items.includes(food))
+            );
+          },
+        },
+        methods: {
+          saveFoodsToLocalStorage() {
+            window.localStorage.setItem("foods", JSON.stringify(this.foods));
+          },
+          totalCalories() {
+            return this.meals.reduce(
+              (sum, meal) =>
+                sum +
+                meal.items.reduce(
+                  (mealSum, item) => mealSum + item.calories * item.servings,
+                  0
+                ),
+              0
+            );
+          },
+          totalProtein() {
+            return this.meals.reduce(
+              (sum, meal) =>
+                sum +
+                meal.items.reduce(
+                  (mealSum, item) => mealSum + item.protein * item.servings,
+                  0
+                ),
+              0
+            );
+          },
+          totalCarbs() {
+            return this.meals.reduce(
+              (sum, meal) =>
+                sum +
+                meal.items.reduce(
+                  (mealSum, item) => mealSum + item.carbs * item.servings,
+                  0
+                ),
+              0
+            );
+          },
+          totalFat() {
+            return this.meals.reduce(
+              (sum, meal) =>
+                sum +
+                meal.items.reduce(
+                  (mealSum, item) => mealSum + item.fat * item.servings,
+                  0
+                ),
+              0
+            );
+          },
+          updateRanges() {
+            this.ranges.Calories.total = this.totalCalories();
+            this.ranges.Protein.total = this.totalProtein();
+            this.ranges.Carbs.total = this.totalCarbs();
+            this.ranges.Fat.total = this.totalFat();
+          },
+          getProgressMin(quota) {
+            return Math.min(
+              (quota.total / quota.min) * (quota.min / quota.max) * 100,
+              100 * (quota.min / quota.max)
+            );
+          },
+          getProgressMax(quota) {
+            return Math.min(
+              ((quota.total - quota.min) / (quota.max - quota.min)) *
+                ((quota.max - quota.min) / quota.max) *
+                100,
+              100 * ((quota.max - quota.min) / quota.max)
+            );
+          },
+          getProgressColorMin(quota) {
+            if (quota.total < quota.min) {
+              return "bg-warning"; // Below Min
+            } else if (quota.total <= quota.max) {
+              return "bg-info"; // Between Min and Max
+            } else {
+              return "bg-warning"; // Above target
+            }
+          },
+          getProgressColorMax(quota) {
+            if (quota.total <= quota.max) {
+              return "bg-primary"; // Between Min and Max
+            } else {
+              return "bg-danger"; // Above target
+            }
+          },
+          startSolve() {
+            this.solveMealPlan(this.foods);
+          },
+          updateServings(item) {
+            this.foods[item.name].servings = this.foods[item.name].min_serving;
+            console.log(
+              (this.foods[item.name].servings =
+                this.foods[item.name].min_serving)
+            );
+          },
+          removeFromMeal(item, meal) {
+            const index = meal.items.indexOf(item);
+            if (index > -1) {
+              meal.items.splice(index, 1);
+              this.$forceUpdate(); // Force update to refresh UI
+            }
+          },
+          addToFavorites(item) {
+            if (!this.favoriteFoods.includes(item)) {
+              this.favoriteFoods.push(item);
+              this.$forceUpdate(); // Force update to refresh UI
+            }
+          },
+          removeFromFavorites(item) {
+            const index = this.favoriteFoods.indexOf(item);
+            if (index > -1) {
+              this.favoriteFoods.splice(index, 1);
+              this.$forceUpdate(); // Force update to refresh UI
+            }
+          },
+          toggleRequired(item) {
+            console.log(item);
+            item.required = !item.required;
+            this.$forceUpdate(); // Force update to refresh UI
+          },
+          disableFood(item, meal = false) {
+            if (meal) {
+              this.removeFromMeal(item, meal);
+            }
+            this.foods[item.name].enabled = false;
+            // this.$forceUpdate(); // Force update to refresh UI
+          },
+          enableFood(item) {
+            this.foods[item.name].enabled = true;
+            // this.$forceUpdate(); // Force update to refresh UI
+          },
+          isInMeal(item) {
+            return this.meals.some((meal) => meal.items.includes(item));
+            // return true;
+          },
+          solveMealPlan(foods) {
+            let problem = {
+              optimize: "cost",
+              opType: "min",
+              constraints: {
+                calories: {
+                  min: this.ranges.Calories.min,
+                  max: this.ranges.Calories.max,
+                },
+                fat: {
+                  min: this.ranges.Fat.min,
+                  max: this.ranges.Fat.max,
+                },
+                carbs: {
+                  min: this.ranges.Carbs.min,
+                  max: this.ranges.Carbs.max,
+                },
+                protein: {
+                  min: this.ranges.Protein.min,
+                  max: this.ranges.Protein.max,
+                },
+              },
+              variables: {},
+              ints: [], // No binary support, so use ints instead
+            };
+
+            selectedFoods = preprocessFoodsByGroup(
+              foods,
+              lowestProteinCostHeuristic
+            );
+
+            const display_groups = [
+              "Morning snack",
+              "Breakfast",
+              "Afternoon snack",
+              "Lunch",
+              "Evening snack",
+              "Dinner",
+            ]; // Track Display Groups
+
+            for (const [food, food_data] of Object.entries(selectedFoods)) {
+              if (!food_data.enabled) continue;
+
+              const inMeal = this.meals.some((meal) =>
+                Object.values(meal.items).some((data) => data.name == food)
+              );
+
+              problem.variables[food] = {
+                calories: food_data.calories * food_data.serving_step,
+                fat: food_data.fat * food_data.serving_step,
+                carbs: food_data.carbs * food_data.serving_step,
+                protein: food_data.protein * food_data.serving_step,
+                cost: food_data.cost * food_data.serving_step,
+              };
+
+              // Allow serving size control
+              problem.variables[food][food] = food_data.serving_step;
+
+              food_data.name = food;
+              // Add min/max serving constraints
+              const min_serving = food_data.required
+                ? food_data.min_serving
+                : 0;
+              const max_serving = food_data.max_serving;
+
+              console.log(
+                `${food} Min is ${min_serving} bc ${inMeal} ${food_data.servings} ${food_data.required} ${food_data.min_serving} Max is ${max_serving}`
+              );
+
+              if (!inMeal) {
+                problem.constraints[food] = {
+                  min: min_serving,
+                  max: max_serving,
+                };
+              } else {
+                problem.constraints[food] = {
+                  equal: food_data.servings,
+                };
+              }
+              problem.ints[`${food}`] = 1; // Serving size is an integer
+
+              // Handle group exclusivity
+              if (food_data.display_group) {
+                const group = food_data.group;
+
+                // Initialize group constraint if not already
+                if (!display_groups.includes(food_data.display_group)) {
+                  display_groups.push(food_data.display_group);
+                }
+              }
+            }
+
+            const solution = solver.Solve(problem);
+            console.log(problem);
+            console.log(solution);
+
+            this.displayMealPlan(solution, foods);
+          },
+          displayMealPlan(solution, foods) {
+            // Clear existing food items for each meal
+            this.meals.forEach((meal) => {
+              meal.items = [];
+            });
+
+            if (!solution.feasible) {
+              console.log("No solution was found, displaying best idea");
+              alert("No solution was found, displaying best idea");
+              return; // Stop if no feasible solution is found
+            }
+
+            // Predefined group order
+            const predefinedGroupOrder = [
+              "Breakfast",
+              "Morning snack",
+              "Lunch",
+              "Afternoon snack",
+              "Dinner",
+              "Evening snack",
+            ];
+
+            // Create a map of foods by group
+            const foodsByGroup = {};
+
+            // Sort foods alphabetically
+            const sortedFoods = Object.entries(foods).sort(([foodA], [foodB]) =>
+              foodA.localeCompare(foodB)
+            );
+
+            for (const [food, foodData] of sortedFoods) {
+              const servings = solution[food] * foodData.serving_step;
+              if (servings && servings !== 0) {
+                const group = foodData.display_group || "Ungrouped";
+
+                if (!foodsByGroup[group]) {
+                  foodsByGroup[group] = [];
+                }
+
+                foodsByGroup[group].push({
+                  name: food,
+                  servings: servings.toFixed(2),
+                  calories: foodData.calories * servings,
+                  fat: foodData.fat * servings,
+                  carbs: foodData.carbs * servings,
+                  protein: foodData.protein * servings,
+                  cost: foodData.cost * servings,
+                });
+              }
+            }
+
+            // Sort remaining groups alphabetically
+            const remainingGroups = Object.keys(foodsByGroup)
+              .filter(
+                (group) =>
+                  !predefinedGroupOrder.includes(group) && group !== "Ungrouped"
+              )
+              .sort();
+
+            // Group order: predefined -> remaining alphabetically -> ungrouped
+            const groupOrder = [
+              ...predefinedGroupOrder,
+              ...remainingGroups,
+              "Ungrouped",
+            ];
+
+            // Add foods to the meals based on their group
+            groupOrder.forEach((group) => {
+              if (!foodsByGroup[group]) return;
+
+              // Check if the meal exists, if not, create it
+              let meal = this.meals.find((meal) => meal.name === group);
+              if (!meal) {
+                // Create a new meal entry if it doesn't exist
+                meal = {
+                  id: this.meals.length + 1,
+                  name: group,
+                  items: [],
+                };
+                this.meals.push(meal); // Add new meal to meals array
+              }
+
+              // Add the food items to the found or newly created meal
+              foodsByGroup[group].forEach((food) => {
+                console.log(food);
+                this.foods[food.name].servings =
+                  solution[food.name] * this.foods[food.name].serving_step;
+                meal.items.push(this.foods[food.name]);
+              });
+            });
+          },
+        },
+        watch: {
+          meals: {
+            handler() {
+              this.updateRanges(); // Update quotas when meals change
+              // Watch for any change in meals and trigger updates
+              this.$forceUpdate();
+            },
+            deep: true, // Ensure changes to nested arrays trigger the watcher
+          },
+        },
+        mounted() {
+          // Initialize with the provided JSON data
+          this.ranges = {
+            Calories: { min: 1700, max: 1800, total: 0 },
+            Fat: { min: 30, max: 55, total: 0 },
+            Carbs: { min: 120, max: 200, total: 0 },
+            Protein: { min: 190, max: 210, total: 0 },
+          };
+        },
+      });
+
+      function preprocessFoodsByGroup(foods, heuristic) {
+        let selectedFoods = {};
+
+        const groupFoods = {}; // To store foods by their group
+        for (const [food, food_data] of Object.entries(foods)) {
+          if (!food_data.enabled) continue;
+
+          const group = food_data.group; // Handle ungrouped foods
+          if (food_data.group == "") {
+            selectedFoods[food] = food_data;
+            continue;
+          }
+
+          if (!groupFoods[group]) {
+            groupFoods[group] = [];
+          }
+          groupFoods[group].push({ food, ...food_data });
+        }
+
+        // Select one food from each group based on the heuristic
+        for (const [group, foodsInGroup] of Object.entries(groupFoods)) {
+          let bestFood = null;
+
+          for (const foodData of foodsInGroup) {
+            if (!bestFood) {
+              bestFood = foodData;
+            } else {
+              // Use the heuristic function to select the best food in the group
+              if (heuristic(foodData, bestFood)) {
+                bestFood = foodData;
+              }
+            }
+          }
+
+          // Add the selected food to the final list
+          selectedFoods[bestFood.food] = bestFood;
+        }
+
+        return selectedFoods;
+      }
+
+      // Example heuristic: Select the food with the highest protein content
+      function highestProteinHeuristic(currentFood, bestFood) {
+        return currentFood.protein > bestFood.protein;
+      }
+
+      // Example heuristic: Select the food with the lowest cost
+      function lowestCostHeuristic(currentFood, bestFood) {
+        return currentFood.cost < bestFood.cost;
+      }
+
+      // Example heuristic: Select the food with the lowest cost per protein
+      function lowestProteinCostHeuristic(currentFood, bestFood) {
+        return (
+          currentFood.protein / currentFood.cost >
+          bestFood.protein / bestFood.cost
+        );
+      }
+      //   app.component("draggable", vuedraggable);
+      //   app.mount("#app");
+
+      // Check localStorage for json foods
+      if (window.localStorage.getItem("foods") != null)
+        try {
+          app.foods = JSON.parse(window.localStorage.getItem("foods"));
+        } catch (e) {
+          app.foods = {};
+        }
+      // Add name property to each food item
+      for (let [name, food] of Object.entries(app.foods)) {
+        food.name = name;
+      }
+    </script>
+  </body>
+</html>
