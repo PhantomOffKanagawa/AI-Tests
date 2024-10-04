@@ -6,7 +6,7 @@ import {
   Droppable,
   Draggable,
   DropResult,
-} from "@hello-pangea/dnd";
+} from "react-beautiful-dnd";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { Plus, Minus, X, RotateCcw, Download, Copy } from "lucide-react";
 
 // @ts-ignore
-// import solver from "javascript-lp-solver";
+import solver from "javascript-lp-solver";
 
 interface Food {
   name: string;
@@ -34,8 +34,6 @@ interface Food {
   required: boolean;
   display_group: string;
   group: string;
-  key: string;
-  draggable_id: string;
   inMeal: boolean;
 }
 
@@ -69,86 +67,13 @@ export default function MealPlanGenerator() {
   useEffect(() => {
     const storedFoods = localStorage.getItem("foods");
     const storedRanges = localStorage.getItem("ranges");
-
-    var foodsWithIds: { [key: string]: any } = {};
-    if (storedFoods) {
-      foodsWithIds = JSON.parse(storedFoods);
-      // Convert the names to safe draggable IDs
-
-      for (let key in foodsWithIds) {
-        foodsWithIds[key].name = key;
-
-        // const draggableId = foodName.replace(/\s+/g, "_");
-        const draggableId = encodeURIComponent(key);
-
-        foodsWithIds[key].key = draggableId;
-        foodsWithIds[key].draggable_id = draggableId;
-      }
-    }
-
-    // if (storedFoods) setFoods(JSON.parse(storedFoods));
-    if (storedFoods) setFoods(foodsWithIds);
+    if (storedFoods) setFoods(JSON.parse(storedFoods));
     if (storedRanges) setRanges(JSON.parse(storedRanges));
   }, []);
 
   useEffect(() => {
     updateRanges();
   }, [meals]);
-
-  const restrictToNumbers = (event: KeyboardEvent) => {
-    // Allow control keys like backspace, delete, arrow keys
-    const allowedKeys = [
-      "Backspace",
-      "Delete",
-      "ArrowLeft",
-      "ArrowRight",
-      "ArrowUp",
-      "ArrowDown",
-      "Tab",
-    ];
-
-    // Allow numeric keys and period for decimals
-    const isNumber =
-      (event.key >= "0" && event.key <= "9") || event.key === ".";
-
-    // If the key pressed is not a number and not allowed control keys, prevent it
-    if (!isNumber && !allowedKeys.includes(event.key)) {
-      event.preventDefault();
-    }
-  };
-
-  const clearMeals = () => {
-    const newMeals = [
-      { id: 1, name: "Breakfast", items: [] },
-      { id: 3, name: "Lunch", items: [] },
-      { id: 5, name: "Dinner", items: [] },
-    ];
-
-    const newFoods = {...foods}
-    for (const key in newFoods) {
-      newFoods[key].inMeal = false;
-      newFoods[key].servings = newFoods[key].min_serving;
-    } 
-
-    setMeals(newMeals);
-    setFoods(foods);
-  };
-
-  const updateServings = (e: any, meal: Meal, food: Food) => {
-    const newMeals = [...meals];
-    const newFoods = { ...foods };
-
-    const mealIndex = newMeals.findIndex((m) => m.id === meal.id);
-    const itemIndex = newMeals[mealIndex].items.findIndex(
-      (i) => i.name === food.name
-    );
-    newMeals[mealIndex].items[itemIndex].servings = parseFloat(e.target.value);
-
-    foods[food.name].servings = e.target.value;
-
-    setMeals(newMeals);
-    setFoods(newFoods);
-  };
 
   const updateRanges = useCallback(() => {
     const newRanges = { ...ranges };
@@ -177,39 +102,29 @@ export default function MealPlanGenerator() {
   }, [meals, ranges]);
 
   const onDragEnd = (result: DropResult) => {
-    const { source, destination, draggableId } = result;
-
-    console.log(result);
+    const { source, destination } = result;
 
     if (!destination) {
       return;
     }
 
-    // Get source & destination IDs
     const sourceId = source.droppableId;
     const destId = destination.droppableId;
 
-    // Keep local edited copies of foods and meals
     const newFoods = { ...foods };
     const newMeals = [...meals];
 
-    // Function to get food item from a given droppable
     const getFood = (id: string, index: number): Food => {
-      if (id === "required-foods") {
-        const filteredFoods: Food[] = requiredFoods;
-        return filteredFoods[index]; // Use filtered array and index properly
-      } else if (id === "all-foods") {
-        const filteredFoods: Food[] = enabledFoods;
-        return filteredFoods[index]; // Use filtered array and index properly
+      if (id === "all-foods" || id === "required-foods") {
+        return Object.values(foods).filter(
+          (f) => f.required === (id === "required-foods")
+        )[index];
       }
       const meal = meals.find((m) => m.id === parseInt(id));
       return meal ? meal.items[index] : Object.values(foods)[0];
     };
 
-    // Get the foodItem from the droppable
     const foodItem = getFood(sourceId, source.index);
-    // const foodItem = foods[decodeURIComponent(draggableId)]
-    console.log(foodItem);
 
     // Update food properties based on destination
     if (destId === "required-foods") {
@@ -218,38 +133,27 @@ export default function MealPlanGenerator() {
     } else if (destId === "all-foods") {
       newFoods[foodItem.name].required = false;
       newFoods[foodItem.name].enabled = true;
+      newFoods[foodItem.name].inMeal = false;
     } else {
       // Dropped into a meal
       const mealIndex = newMeals.findIndex((m) => m.id === parseInt(destId));
       if (mealIndex !== -1) {
-        if (sourceId === destId) {
-          // If dragging within the same meal, rearrange the item
-          const currentItems = newMeals[mealIndex].items;
-          const movedItem = currentItems[source.index]; // Get the item being dragged
-          currentItems.splice(source.index, 1); // Remove it from the original position
-          currentItems.splice(destination.index, 0, movedItem); // Insert it into the new position
-        } else {
-          // If dragging to a different meal
-          const newFood = { ...foodItem, servings: 1, inMeal: true };
-          newMeals[mealIndex].items.splice(destination.index, 0, newFood);
-          newFoods[foodItem.name].inMeal = true;
-        }
+        const newFood = { ...foodItem, servings: 1, inMeal: true };
+        newMeals[mealIndex].items.splice(destination.index, 0, newFood);
+        newFoods[foodItem.name].inMeal = true;
       }
     }
 
-    // Remove from source if it's a meal and not the same meal
-    // if (
-    //   sourceId !== "all-foods" &&
-    //   sourceId !== "required-foods" &&
-    //   sourceId !== destId
-    // ) {
-    //   const sourceMealIndex = newMeals.findIndex(
-    //     (m) => m.id === parseInt(sourceId)
-    //   );
-    //   if (sourceMealIndex !== -1) {
-    //     newMeals[sourceMealIndex].items.splice(source.index, 1);
-    //   }
-    // }
+    // Remove from source if it's a meal
+    if (sourceId !== "all-foods" && sourceId !== "required-foods") {
+      const sourceMealIndex = newMeals.findIndex(
+        (m) => m.id === parseInt(sourceId)
+      );
+      if (sourceMealIndex !== -1) {
+        newMeals[sourceMealIndex].items.splice(source.index, 1);
+        newFoods[foodItem.name].inMeal = false;
+      }
+    }
 
     setFoods(newFoods);
     setMeals(newMeals);
@@ -279,11 +183,11 @@ export default function MealPlanGenerator() {
   };
 
   const enabledFoods = Object.values(foods).filter(
-    (food) => food.enabled && !food.required && !food.inMeal
+    (food) => food.enabled && !food.required
   );
   const disabledFoods = Object.values(foods).filter((food) => !food.enabled);
   const requiredFoods = Object.values(foods).filter(
-    (food) => food.enabled && food.required && !food.inMeal
+    (food) => food.enabled && food.required
   );
 
   const toggleRequired = (item: Food) => {
@@ -464,7 +368,6 @@ export default function MealPlanGenerator() {
 
   const displayMealPlan = (solution: any, foods: { [key: string]: Food }) => {
     const newMeals = meals.map((meal) => ({ ...meal, items: [] }));
-    const newFoods = { ...foods };
 
     if (!solution.feasible) {
       console.log("No solution was found, displaying best idea");
@@ -500,22 +403,27 @@ export default function MealPlanGenerator() {
           ...foodData,
           name: food,
           servings: parseFloat(servings.toFixed(2)),
-          inMeal: true,
+          calories: foodData.calories * servings,
+          fat: foodData.fat * servings,
+          carbs: foodData.carbs * servings,
+          protein: foodData.protein * servings,
+          cost: foodData.cost * servings,
         });
-
-        newFoods[food].inMeal = true;
-      } else {
-        newFoods[food].inMeal = false;
       }
     }
 
     const remainingGroups = Object.keys(foodsByGroup)
-      .filter((group) => !predefinedGroupOrder.includes(group))
+      .filter(
+        (group) =>
+          !predefinedGroupOrder.includes(group) && group !== "Ungrouped"
+      )
       .sort();
 
-    const groupOrder = [...predefinedGroupOrder, ...remainingGroups];
-
-    console.log(newMeals);
+    const groupOrder = [
+      ...predefinedGroupOrder,
+      ...remainingGroups,
+      "Ungrouped",
+    ];
 
     groupOrder.forEach((group) => {
       if (!foodsByGroup[group]) return;
@@ -523,25 +431,20 @@ export default function MealPlanGenerator() {
       let meal = newMeals.find((meal) => meal.name === group);
       if (!meal) {
         meal = {
-          id: newMeals.length + 10,
+          id: newMeals.length + 1,
           name: group,
           items: [],
         };
         newMeals.push(meal);
       }
 
-      console.log(`Meal: ${meal.name} is id: ${meal.id}`);
-      meal.items = [];
       foodsByGroup[group].forEach((food) => {
-        if (!meal.items.some((item) => item.name === food.name)) {
-          meal.items.push(food);
-        }
+        const newFood = { ...foods[food.name], servings: food.servings };
+        meal!.items.push(newFood);
       });
     });
 
     setMeals(newMeals);
-    setFoods(newFoods);
-    console.log(foods);
   };
 
   const startSolve = () => {
@@ -572,21 +475,16 @@ export default function MealPlanGenerator() {
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
-      <script src="https://unpkg.com/javascript-lp-solver/prod/solver.js"></script>
-      <div className="container mx-auto px-4 py-8 max-h-screen" style={{
-        overflow: "hidden"
-      }}>
-        <h1 className="text-3xl font-bold mb-6">
-          Enhanced Enhanced Meal Planner
-        </h1>
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-6">Enhanced Meal Planner</h1>
         <div className="flex flex-col lg:flex-row gap-8">
-          <div className="w-full lg:w-2/3 h-full">
+          <div className="w-full lg:w-2/3">
             <Card>
               <CardHeader>
                 <CardTitle>Meals (Total: ${price.toFixed(2)})</CardTitle>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="h-[600px] h-full pr-4">
+                <ScrollArea className="h-[600px] pr-4">
                   {meals.map((meal) => (
                     <div key={meal.id} className="mb-6">
                       <h3 className="text-xl font-semibold mb-2">
@@ -597,12 +495,12 @@ export default function MealPlanGenerator() {
                           <div
                             {...provided.droppableProps}
                             ref={provided.innerRef}
-                            className="min-h-20 bg-neutral-200 rounded-md"
+                            className="space-y-2"
                           >
                             {meal.items.map((item, index) => (
                               <Draggable
-                                key={item.draggable_id}
-                                draggableId={item.draggable_id + "_meal"}
+                                key={item.name}
+                                draggableId={item.name}
                                 index={index}
                               >
                                 {(provided) => (
@@ -623,9 +521,24 @@ export default function MealPlanGenerator() {
                                           min={item.min_serving}
                                           max={item.max_serving}
                                           step={item.serving_step}
-                                          onChange={(e) =>
-                                            updateServings(e, meal, item)
-                                          }
+                                          onChange={(e) => {
+                                            const newMeals = [...meals];
+                                            const mealIndex =
+                                              newMeals.findIndex(
+                                                (m) => m.id === meal.id
+                                              );
+                                            const itemIndex = newMeals[
+                                              mealIndex
+                                            ].items.findIndex(
+                                              (i) => i.name === item.name
+                                            );
+                                            newMeals[mealIndex].items[
+                                              itemIndex
+                                            ].servings = parseFloat(
+                                              e.target.value
+                                            );
+                                            setMeals(newMeals);
+                                          }}
                                           className="w-20"
                                         />
                                         <Button
@@ -666,16 +579,9 @@ export default function MealPlanGenerator() {
                 </ScrollArea>
               </CardContent>
             </Card>
-            <div className="w-5/6 inline-block px-2">
-              <Button onClick={startSolve} className="w-full mt-4">
-                Generate Meal Plan
-              </Button>
-              </div>
-            <div className="w-1/6 inline-block px-2">
-              <Button onClick={clearMeals} className="w-full mt-4">
-                Clear
-              </Button>
-            </div>
+            <Button onClick={startSolve} className="w-full mt-4">
+              Generate Meal Plan
+            </Button>
           </div>
           <div className="w-full lg:w-1/3 space-y-6">
             <Card>
@@ -689,13 +595,14 @@ export default function MealPlanGenerator() {
                       <div
                         {...provided.droppableProps}
                         ref={provided.innerRef}
-                        className="h-full space-y-2"
+                        className="space-y-2"
                       >
                         {requiredFoods.map((item, index) => (
                           <Draggable
-                            key={item.draggable_id}
-                            draggableId={item.draggable_id}
+                            key={item.name}
+                            draggableId={item.name}
                             index={index}
+                            isDragDisabled={item.inMeal}
                           >
                             {(provided) => (
                               <div
@@ -733,26 +640,29 @@ export default function MealPlanGenerator() {
                 <CardTitle>All Foods</CardTitle>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="h-[100px]">
+                <ScrollArea className="h-[200px]">
                   <Droppable droppableId="all-foods">
                     {(provided) => (
                       <div
                         {...provided.droppableProps}
                         ref={provided.innerRef}
-                        className="space-y-2 h-full"
+                        className="space-y-2"
                       >
                         {enabledFoods.map((item, index) => (
                           <Draggable
-                            key={item.draggable_id}
-                            draggableId={item.draggable_id}
+                            key={item.name}
+                            draggableId={item.name}
                             index={index}
+                            isDragDisabled={item.inMeal}
                           >
                             {(provided) => (
                               <div
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
-                                className="bg-secondary p-2 rounded-md flex justify-between items-center"
+                                className={`bg-secondary p-2 rounded-md flex justify-between items-center ${
+                                  item.inMeal ? "opacity-50" : ""
+                                }`}
                               >
                                 <span>
                                   {item.name} - Calories: {item.calories}
@@ -790,7 +700,7 @@ export default function MealPlanGenerator() {
                 <CardTitle>Disabled Foods</CardTitle>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="h-[100px]">
+                <ScrollArea className="h-[200px]">
                   <div className="space-y-2">
                     {disabledFoods.map((item) => (
                       <div
@@ -828,7 +738,6 @@ export default function MealPlanGenerator() {
                           <span
                             contentEditable
                             suppressContentEditableWarning
-                            onKeyDown={(e) => restrictToNumbers(e)}
                             onBlur={(e) => updateTarget(key, e, "min")}
                             className="px-1 rounded bg-secondary"
                           >
