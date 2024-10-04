@@ -258,6 +258,9 @@
         <button class="btn btn-primary mt-1" @click="saveToLocalStorage()">
           Save to Browser
         </button>
+        <button class="btn btn-primary mt-1" @click="copyForTodoist()">
+          Copy for Todoist
+        </button>
       </div>
     </div>
 
@@ -277,7 +280,7 @@
               //   { id: 6, name: "Evening snack", items: [] },
             ],
             favoriteFoods: [],
-            price: 0.00
+            price: 0.0,
           };
         },
         computed: {
@@ -353,6 +356,24 @@
               // If the input is invalid, reset to the previous target value
               event.target.textContent = this.ranges[nutrient][key];
             }
+          },
+          async copyText(mytext) {
+            try {
+              await navigator.clipboard.writeText(mytext);
+              alert("Copied");
+            } catch ($e) {
+              alert("Cannot copy");
+            }
+          },
+          copyForTodoist() {
+            let all_items = "";
+            this.meals.forEach((meal) => {
+              meal.items.forEach((food) => {
+                console.log(`${food.name} x${food.servings.toFixed(1)}`);
+                all_items += `${food.name} x${food.servings.toFixed(1)}\n`;
+              });
+            });
+            this.copyText(all_items)
           },
           saveToLocalStorage() {
             window.localStorage.setItem("foods", JSON.stringify(this.foods));
@@ -702,6 +723,12 @@
         },
         mounted() {
           // Initialize with the provided JSON data
+          this.ranges = {
+            Calories: { min: 1700, max: 1800, total: 0 },
+            Fat: { min: 30, max: 55, total: 0 },
+            Carbs: { min: 120, max: 200, total: 0 },
+            Protein: { min: 190, max: 210, total: 0 },
+          };
         },
       });
 
@@ -783,12 +810,12 @@
         try {
           app.ranges = JSON.parse(window.localStorage.getItem("ranges"));
         } catch (e) {
-          app.ranges = {
-            Calories: { min: 1700, max: 1800, total: 0 },
-            Fat: { min: 30, max: 55, total: 0 },
-            Carbs: { min: 120, max: 200, total: 0 },
-            Protein: { min: 190, max: 210, total: 0 },
-          };
+          // app.ranges = {
+          //   Calories: { min: 1700, max: 1800, total: 0 },
+          //   Fat: { min: 30, max: 55, total: 0 },
+          //   Carbs: { min: 120, max: 200, total: 0 },
+          //   Protein: { min: 190, max: 210, total: 0 },
+          // };
         }
       // Add name property to each food item
       for (let [name, range] of Object.entries(app.ranges)) {
