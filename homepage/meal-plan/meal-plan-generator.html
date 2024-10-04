@@ -52,7 +52,7 @@
     <div id="app" class="container-fluid mt-4">
       <h1>Enhanced Meal Planner</h1>
       <div class="row">
-        <div class="col-md-8 scrollable">
+        <div class="col-md-8 scrollable pb-5">
           <h2>Meals</h2>
           <div v-for="(meal, mealIndex) in meals" :key="meal.name">
             <h3>{{ meal.name }}</h3>
@@ -189,10 +189,27 @@
           <ul class="list-group">
             <li class="list-group-item">
               <div v-for="(quotas, key) in ranges" :key="key">
-                <label
-                  >{{ key.charAt(0).toUpperCase() + key.slice(1) }}: {{
-                  quotas.min }} / {{ quotas.total }} / {{ quotas.max }}</label
-                >
+                <div class="progress-label">
+                  <span
+                    >{{ key.charAt(0).toUpperCase() + key.slice(1) }}:
+                  </span>
+                  <span
+                    contenteditable="true"
+                    @keydown="restrictToNumbers($event)"
+                    @blur="updateTarget(key, $event, 'min')"
+                    class="editable-target"
+                    :title="'Click to edit the min for ' + key"
+                    >{{ quotas.min }}</span
+                  ><span> / {{ quotas.total }} / </span
+                  ><span
+                    contenteditable="true"
+                    @keydown="restrictToNumbers($event)"
+                    @blur="updateTarget(key, $event, 'max')"
+                    class="editable-target"
+                    :title="'Click to edit the min for ' + key"
+                    >{{ quotas.max }}</span
+                  >
+                </div>
                 <div class="progress bg-light rounded">
                   <div
                     class="progress-bar"
@@ -238,15 +255,11 @@
         >
           Download JSON
         </button> -->
-        <button
-          class="btn btn-primary mt-1"
-          @click='saveFoodsToLocalStorage()'
-        >
+        <button class="btn btn-primary mt-1" @click="saveToLocalStorage()">
           Save to Browser
         </button>
       </div>
     </div>
-
 
     <script>
       const app = new Vue({
@@ -289,8 +302,60 @@
           },
         },
         methods: {
-          saveFoodsToLocalStorage() {
+          restrictToNumbers(event) {
+            // Allow control keys like backspace, delete, arrow keys
+            const allowedKeys = [
+              "Backspace",
+              "Delete",
+              "ArrowLeft",
+              "ArrowRight",
+              "ArrowUp",
+              "ArrowDown",
+              "Tab",
+            ];
+
+            // Allow numeric keys and period for decimals
+            const isNumber =
+              (event.key >= "0" && event.key <= "9") || event.key === ".";
+
+            // If the key pressed is not a number and not allowed control keys, prevent it
+            if (!isNumber && !allowedKeys.includes(event.key)) {
+              event.preventDefault();
+            }
+          },
+          updateTarget(nutrient, event, key) {
+            // Get the new value from the contenteditable element
+            let newTarget = parseFloat(event.target.textContent.trim());
+
+            if (!isNaN(newTarget)) {
+              // // Enforce min and max constraints
+              // const min = this.nutritionQuotas[nutrient].min;
+              // const max = this.nutritionQuotas[nutrient].max;
+
+              if (newTarget < 0) {
+                newTarget = 0;
+              } else if (newTarget > 50000) {
+                newTarget = 50000;
+              }
+
+              if (key == "min") {
+                if (this.ranges[nutrient].max < newTarget)
+                  newTarget = this.ranges[nutrient].max;
+              } else {
+                if (this.ranges[nutrient].min > newTarget)
+                  newTarget = this.ranges[nutrient].min;
+              }
+
+              this.ranges[nutrient][key] = newTarget;
+              this.updateRanges();
+            } else {
+              // If the input is invalid, reset to the previous target value
+              event.target.textContent = this.ranges[nutrient][key];
+            }
+          },
+          saveToLocalStorage() {
             window.localStorage.setItem("foods", JSON.stringify(this.foods));
+            window.localStorage.setItem("ranges", JSON.stringify(this.ranges));
           },
           totalCalories() {
             return this.meals.reduce(
@@ -624,12 +689,6 @@
         },
         mounted() {
           // Initialize with the provided JSON data
-          this.ranges = {
-            Calories: { min: 1700, max: 1800, total: 0 },
-            Fat: { min: 30, max: 55, total: 0 },
-            Carbs: { min: 120, max: 200, total: 0 },
-            Protein: { min: 190, max: 210, total: 0 },
-          };
         },
       });
 
@@ -704,6 +763,23 @@
       // Add name property to each food item
       for (let [name, food] of Object.entries(app.foods)) {
         food.name = name;
+      }
+
+      // Check localStorage for ranges
+      if (window.localStorage.getItem("ranges") != null)
+        try {
+          app.ranges = JSON.parse(window.localStorage.getItem("ranges"));
+        } catch (e) {
+          app.ranges = {
+            Calories: { min: 1700, max: 1800, total: 0 },
+            Fat: { min: 30, max: 55, total: 0 },
+            Carbs: { min: 120, max: 200, total: 0 },
+            Protein: { min: 190, max: 210, total: 0 },
+          };
+        }
+      // Add name property to each food item
+      for (let [name, range] of Object.entries(app.ranges)) {
+        range.total = 0;
       }
     </script>
   </body>
