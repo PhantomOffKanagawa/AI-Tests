@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import Link from 'next/link';
+import React, { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -34,27 +34,50 @@ export default function Layout({ children }: LayoutProps) {
           <nav className="flex-1 overflow-y-auto">
             <ul className="p-4 space-y-2">
               <li>
-                <Link href="/" className="block px-4 py-2 rounded-md hover:bg-gray-100">
+                <Link
+                  href="/"
+                  className="block px-4 py-2 rounded-md hover:bg-gray-100"
+                >
                   Dashboard
                 </Link>
               </li>
               <li>
-                <Link href="/data-entry" className="block px-4 py-2 rounded-md hover:bg-gray-100">
+                <Link
+                  href="/enter-data"
+                  className="block px-4 py-2 rounded-md hover:bg-gray-100"
+                >
                   Data Entry
                 </Link>
               </li>
               <li>
-                <Link href="/meal-plan" className="block px-4 py-2 rounded-md hover:bg-gray-100">
+                <Link
+                  href="/meal-plan/generate"
+                  className="block px-4 py-2 rounded-md hover:bg-gray-100"
+                >
                   Meal Plan
                 </Link>
               </li>
               <li>
-                <a href="#" className="block px-4 py-2 rounded-md hover:bg-gray-100">
+                <Link
+                  href="/meal-plan/edit-foods"
+                  className="block px-4 py-2 rounded-md hover:bg-gray-100"
+                >
+                  Edit Foods
+                </Link>
+              </li>
+              <li>
+                <a
+                  href="#"
+                  className="block px-4 py-2 rounded-md hover:bg-gray-100"
+                >
                   Analytics
                 </a>
               </li>
               <li>
-                <a href="#" className="block px-4 py-2 rounded-md hover:bg-gray-100">
+                <a
+                  href="#"
+                  className="block px-4 py-2 rounded-md hover:bg-gray-100"
+                >
                   Settings
                 </a>
               </li>
@@ -75,8 +98,8 @@ export default function Layout({ children }: LayoutProps) {
               onClick={() => setSidebarOpen(!sidebarOpen)}
             >
               <Menu className="h-6 w-6" />
-            </Button>
-            <div className="flex items-center space-x-4">
+            </Button>{" "}
+            {/* <div className="flex items-center space-x-4">
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                 <Input
@@ -85,7 +108,7 @@ export default function Layout({ children }: LayoutProps) {
                   className="pl-8 w-64"
                 />
               </div>
-            </div>
+            </div> */}
             <div className="flex items-center space-x-4">
               <Button variant="ghost" size="icon">
                 <Bell className="h-5 w-5" />
@@ -123,7 +146,7 @@ export default function Layout({ children }: LayoutProps) {
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto p-4">
           {children}
-          <div className='w-full h-10'></div>
+          <div className="w-full h-10"></div>
         </main>
       </div>
     </div>
