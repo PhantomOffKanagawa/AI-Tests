@@ -14,10 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Minus, X, RotateCcw, Download, Copy } from "lucide-react";
-
-// @ts-ignore
-// import solver from "javascript-lp-solver";
+import { Plus, Minus, X, RotateCcw, Download, Copy, Save } from "lucide-react";
+import Layout from '@/components/Layout';
 
 interface Food {
   name: string;
@@ -124,11 +122,11 @@ export default function MealPlanGenerator() {
       { id: 5, name: "Dinner", items: [] },
     ];
 
-    const newFoods = {...foods}
+    const newFoods = { ...foods };
     for (const key in newFoods) {
       newFoods[key].inMeal = false;
       newFoods[key].servings = newFoods[key].min_serving;
-    } 
+    }
 
     setMeals(newMeals);
     setFoods(foods);
@@ -278,13 +276,16 @@ export default function MealPlanGenerator() {
     setFoods(newFoods);
   };
 
-  const enabledFoods = Object.values(foods).filter(
-    (food) => food.enabled && !food.required && !food.inMeal
-  );
-  const disabledFoods = Object.values(foods).filter((food) => !food.enabled);
+  const enabledFoods = Object.values(foods)
+    .filter((food) => food.enabled && !food.required && !food.inMeal)
+    .sort((foodA, foodB) => foodA.name.localeCompare(foodB.name));
+
+  const disabledFoods = Object.values(foods).filter((food) => !food.enabled)
+  .sort((foodA, foodB) => foodA.name.localeCompare(foodB.name));
   const requiredFoods = Object.values(foods).filter(
     (food) => food.enabled && food.required && !food.inMeal
-  );
+  )
+  .sort((foodA, foodB) => foodA.name.localeCompare(foodB.name));
 
   const toggleRequired = (item: Food) => {
     const newFoods = { ...foods };
@@ -572,10 +573,11 @@ export default function MealPlanGenerator() {
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
-      <script src="https://unpkg.com/javascript-lp-solver/prod/solver.js"></script>
-      <div className="container mx-auto px-4 py-8 max-h-screen" style={{
-        overflow: "hidden"
-      }}>
+    <script src="https://unpkg.com/javascript-lp-solver/prod/solver.js"></script>
+    <Layout>
+    <div
+        className="container mx-auto px-4 py-8 max-h-screen"
+      >
         <h1 className="text-3xl font-bold mb-6">
           Enhanced Enhanced Meal Planner
         </h1>
@@ -670,7 +672,7 @@ export default function MealPlanGenerator() {
               <Button onClick={startSolve} className="w-full mt-4">
                 Generate Meal Plan
               </Button>
-              </div>
+            </div>
             <div className="w-1/6 inline-block px-2">
               <Button onClick={clearMeals} className="w-full mt-4">
                 Clear
@@ -858,7 +860,7 @@ export default function MealPlanGenerator() {
         </div>
         <div className="fixed bottom-4 right-4 flex space-x-2">
           <Button onClick={saveToLocalStorage}>
-            <Download className="h-4 w-4 mr-2" />
+            <Copy className="h-4 w-4 mr-2" />
             Save to Browser
           </Button>
           <Button onClick={copyForTodoist}>
@@ -867,6 +869,7 @@ export default function MealPlanGenerator() {
           </Button>
         </div>
       </div>
+      </Layout>
     </DragDropContext>
   );
 }
