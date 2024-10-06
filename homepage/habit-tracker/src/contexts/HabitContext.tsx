@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
 
-interface HabitData {
+export interface HabitData {
   date: string
   calories: number
   minutesActive: number
@@ -12,18 +12,18 @@ interface HabitData {
   pictureTaken: boolean
 }
 
-interface TodoItem {
+export interface TodoItem {
   id: string
   text: string
   completed: boolean
 }
 
-interface CalendarDay {
+export interface CalendarDay {
   date: string
   completed: boolean
 }
 
-interface Goal {
+export interface Goal {
     id: string
     name: string
     target: number

@@ -53,8 +53,9 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { useHabitContext } from "@/contexts/HabitContext";
+import { HabitData, useHabitContext } from "@/contexts/HabitContext";
 import Layout from "@/components/Layout";
+import { TodoItem } from "@/contexts/HabitContext";
 
 const TABS = ["Daily Tasks", "Daily Food Items", "To Do"];
 
@@ -657,7 +658,7 @@ export default function HabitDashboard() {
                         <div className="flex-1">
                           <p className="text-sm font-medium">{goal.name}</p>
                           <Progress
-                            value={(goal.current / goal.target) * 100}
+                            segments={[{value: (goal.current / goal.target) * 100}]}
                             className="h-2"
                           />
                         </div>

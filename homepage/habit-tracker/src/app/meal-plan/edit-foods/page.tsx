@@ -92,7 +92,7 @@ export default function FoodsEditor() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isBarcodeDialogOpen, setIsBarcodeDialogOpen] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLDivElement>(null); //useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   const NUTRITIONIX_APP_ID = process.env.NEXT_PUBLIC_NUTRITIONIX_APP_ID;
@@ -288,7 +288,7 @@ export default function FoodsEditor() {
         inputStream: {
           name: "Live",
           type: "LiveStream",
-          target: videoRef.current,
+          target: videoRef.current as HTMLDivElement, // We know it is specified
         },
         decoder: {
           readers: ["ean_reader", "ean_8_reader", "upc_reader", "upc_e_reader"],

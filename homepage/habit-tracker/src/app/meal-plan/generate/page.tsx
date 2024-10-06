@@ -474,7 +474,7 @@ export default function MealPlanGenerator() {
   };
 
   const solveMealPlan = (foods: { [key: string]: Food }) => {
-    let problem = {
+    let problem: { optimize: string, opType: string, constraints: { [key: string]: { min?: number; max?: number, equal?: number } }, "variables": any, "ints": any } = {
       optimize: "cost",
       opType: "min",
       constraints: {
@@ -495,8 +495,8 @@ export default function MealPlanGenerator() {
           max: ranges.Protein.max,
         },
       },
-      variables: {} as any,
-      ints: {} as any,
+      variables: {},
+      ints: {},
     };
 
     const selectedFoods = preprocessFoodsByGroup(
@@ -535,12 +535,12 @@ export default function MealPlanGenerator() {
 
       if (!inMeal) {
         problem.constraints[food] = {
-          min: min_serving,
-          max: max_serving,
+          min: min_serving as number,
+          max: max_serving as number,
         };
       } else {
         problem.constraints[food] = {
-          equal: food_data.servings,
+          equal: food_data.servings as number,
         };
       }
       problem.ints[`${food}`] = 1;
@@ -558,7 +558,8 @@ export default function MealPlanGenerator() {
       }
     }
 
-    const solution = solver.Solve(problem);
+    
+    const solution = solver.Solve(problem); // Can't find a way to fix as the library can't be imported to react, different lib?
     console.log(problem);
     console.log(solution);
 
@@ -645,8 +646,8 @@ export default function MealPlanGenerator() {
       console.log(`Meal: ${meal.name} is id: ${meal.id}`);
       meal.items = [];
       foodsByGroup[group].forEach((food) => {
-        if (!meal.items.some((item) => item.name === food.name)) {
-          meal.items.push(food);
+        if (!meal.items.some((item: Food) => item.name === food.name)) {
+          meal.items.push(food as never); // Lol how does this work
         }
       });
     });
@@ -724,7 +725,7 @@ export default function MealPlanGenerator() {
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
-      <script src="https://unpkg.com/javascript-lp-solver/prod/solver.js"></script>
+      <script src="/js/solver.js"></script>
       <Layout>
         <div className="container mx-auto px-4 py-8 max-h-screen">
           <h1 className="text-3xl font-bold mb-6">
@@ -1090,7 +1091,7 @@ export default function MealPlanGenerator() {
                             <span
                               contentEditable
                               suppressContentEditableWarning
-                              onKeyDown={(e) => restrictToNumbers(e)}
+                              onKeyDown={(e) => restrictToNumbers(e as unknown as KeyboardEvent)} // This is insane but what I want
                               onBlur={(e) => updateTarget(key, e, "min")}
                               className="px-1 rounded bg-secondary"
                             >

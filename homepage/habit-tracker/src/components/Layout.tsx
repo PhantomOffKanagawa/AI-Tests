@@ -3,8 +3,9 @@ import { Menu, Search, User, Edit } from 'lucide-react';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import Link from 'next/link';
+import { LayoutProps } from '../../.next/types/app/layout';
 
-const Layout = ({ children }) => {
+const Layout = ({ children } : LayoutProps) => {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
 
   const toggleSidebar = () => {
