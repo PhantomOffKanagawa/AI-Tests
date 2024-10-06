@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,8 +14,30 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Plus, Minus, X, RotateCcw, Download, Copy, Save } from "lucide-react";
+import {
+  Plus,
+  Minus,
+  X,
+  RotateCcw,
+  Download,
+  Copy,
+  Save,
+  Search,
+  Camera,
+} from "lucide-react";
 import Layout from "@/components/Layout";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Loader2 } from "lucide-react";
+import axios from "axios";
+import Quagga from "@ericblade/quagga2";
+import debounce from "lodash/debounce";
 
 interface Food {
   name: string;
@@ -31,9 +53,21 @@ interface Food {
   display_group: string;
   required: boolean;
   enabled: boolean;
+  nutritionix_data?: any;
 }
 
-const initialForm = {
+interface SearchResult {
+  food_name: string;
+  brand_name?: string;
+  serving_unit: string;
+  serving_qty: number;
+  nf_calories: number;
+  photo: { thumb: string };
+  tag_id?: string;
+  nix_item_id?: string;
+}
+
+const initialForm: Food = {
   name: "",
   cost: 0,
   calories: 0,
@@ -52,6 +86,17 @@ const initialForm = {
 export default function FoodsEditor() {
   const [foods, setFoods] = useState<{ [key: string]: Food }>({});
   const [form, setForm] = useState<Food>(initialForm);
+  const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isBarcodeDialogOpen, setIsBarcodeDialogOpen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  const NUTRITIONIX_APP_ID = process.env.NEXT_PUBLIC_NUTRITIONIX_APP_ID;
+  const NUTRITIONIX_API_KEY = process.env.NEXT_PUBLIC_NUTRITIONIX_API_KEY;
 
   useEffect(() => {
     const storedFoods = localStorage.getItem("foods");
@@ -59,6 +104,57 @@ export default function FoodsEditor() {
       setFoods(JSON.parse(storedFoods));
     }
   }, []);
+
+  useEffect(() => {
+    if (!isBarcodeDialogOpen) {
+      stopBarcodeScanner();
+    }
+  }, [isBarcodeDialogOpen]);
+
+  const debouncedSearch = useCallback(
+    debounce(async (query: string) => {
+
+      if (query.length < 3) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await axios.get(
+          `https://trackapi.nutritionix.com/v2/search/instant?query=${query}`,
+          {
+            headers: {
+              "x-app-id": NUTRITIONIX_APP_ID,
+              "x-app-key": NUTRITIONIX_API_KEY,
+            },
+          }
+        );
+        const combinedResults = [
+          ...response.data.common,
+          ...response.data.branded,
+        ];
+        const uniqueResults = combinedResults.reduce(
+          (acc: SearchResult[], current) => {
+            const x = acc.find((item) => item.tag_id === current.tag_id);
+            if (!x) {
+              return acc.concat([current]);
+            } else {
+              return acc;
+            }
+          },
+          []
+        );
+        setSearchResults(uniqueResults);
+      } catch (error) {
+        setError("Error searching the nutrition database. Please try again.");
+        console.error("Error searching nutrition database:", error);
+      }
+      setIsLoading(false);
+    }, 300),
+    []
+  );
+
+  useEffect(() => {
+    debouncedSearch(searchTerm);
+  }, [searchTerm, debouncedSearch]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -126,10 +222,144 @@ export default function FoodsEditor() {
     }
   };
 
+
+  const addSearchResult = async (item: SearchResult) => {
+    // setIsSearchDialogOpen(false); // Better here??
+    setIsLoading(true);
+    setError(null);
+    try {
+      let detailedData;
+      if (item.nix_item_id) {
+        const response = await axios.get(
+          `https://trackapi.nutritionix.com/v2/search/item?nix_item_id=${item.nix_item_id}`,
+          {
+            headers: {
+              "x-app-id": process.env.NEXT_PUBLIC_NUTRITIONIX_APP_ID,
+              "x-app-key": process.env.NEXT_PUBLIC_NUTRITIONIX_API_KEY,
+            },
+          }
+        );
+        detailedData = response.data.foods[0];
+      } else {
+        const response = await axios.post(
+          "https://trackapi.nutritionix.com/v2/natural/nutrients",
+          { query: item.food_name },
+          {
+            headers: {
+              "x-app-id": process.env.NEXT_PUBLIC_NUTRITIONIX_APP_ID,
+              "x-app-key": process.env.NEXT_PUBLIC_NUTRITIONIX_API_KEY,
+            },
+          }
+        );
+        detailedData = response.data.foods[0];
+      }
+      const newFood: Food = {
+        name: detailedData.food_name,
+        cost: 0, // Set a default cost or prompt user to enter
+        calories: detailedData.nf_calories,
+        carbs: detailedData.nf_total_carbohydrate,
+        fat: detailedData.nf_total_fat,
+        protein: detailedData.nf_protein,
+        min_serving: 1,
+        max_serving: 5,
+        serving_step: 0.5,
+        group: "",
+        display_group: "",
+        required: false,
+        enabled: true,
+        nutritionix_data: detailedData,
+      };
+      setIsSearchDialogOpen(false);
+      setForm(newFood);
+      setSearchResults([]);
+      setSearchTerm("");
+    } catch (error) {
+      setError(
+        "Error fetching detailed nutrition information. Please try again."
+      );
+      console.error("Error fetching nutrition details:", error);
+    }
+    setIsLoading(false);
+  };
+
+  const startBarcodeScanner = () => {
+    Quagga.init(
+      {
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: videoRef.current,
+        },
+        decoder: {
+          readers: ["ean_reader", "ean_8_reader", "upc_reader", "upc_e_reader"],
+        },
+      },
+      (err) => {
+        if (err) {
+          console.error("Error starting Quagga:", err);
+          setError("Error starting barcode scanner. Please try again.");
+          return;
+        }
+        Quagga.start();
+      }
+    );
+
+    Quagga.onDetected(handleBarcodeDetected);
+  };
+
+  const stopBarcodeScanner = () => {
+    Quagga.stop();
+  };
+
+  const handleBarcodeDetected = async (result: any) => {
+    stopBarcodeScanner();
+    const barcode = result.codeResult.code;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await axios.get(
+        `https://trackapi.nutritionix.com/v2/search/item?upc=${barcode}`,
+        {
+          headers: {
+            "x-app-id": NUTRITIONIX_APP_ID,
+            "x-app-key": NUTRITIONIX_API_KEY,
+          },
+        }
+      );
+      const foodData = response.data.foods[0];
+      const newFood: Food = {
+        name: foodData.food_name,
+        cost: 0, // Set a default cost or prompt user to enter
+        calories: foodData.nf_calories,
+        carbs: foodData.nf_total_carbohydrate,
+        fat: foodData.nf_total_fat,
+        protein: foodData.nf_protein,
+        min_serving: 1,
+        max_serving: 5,
+        serving_step: 0.5,
+        group: "",
+        display_group: "",
+        required: false,
+        enabled: true,
+        nutritionix_data: foodData,
+      };
+      setForm(newFood);
+      setIsBarcodeDialogOpen(false);
+    } catch (error) {
+      setError(
+        "Error fetching product information. Please try again or enter details manually."
+      );
+      console.error("Error fetching product information:", error);
+    }
+    setIsLoading(false);
+  };
+
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-6">Food Editor</h1>
+        <h1 className="text-3xl font-bold mb-6">
+          Food Editor
+        </h1>
 
         <Card className="mb-8">
           <CardHeader>
@@ -340,9 +570,106 @@ export default function FoodsEditor() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full md:w-auto">
-                Add/Update Food
-              </Button>
+              <div className="flex space-x-2">
+                <Button type="submit" className="w-full md:w-auto">
+                  Add/Update Food
+                </Button>
+                <Dialog
+                  open={isSearchDialogOpen}
+                  onOpenChange={setIsSearchDialogOpen}
+                >
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="w-full md:w-auto">
+                      <Search className="w-4 h-4 mr-2" />
+                      Search Database
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Search Nutrition Database</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        type="text"
+                        placeholder="Search for a food..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                    </div>
+                    {error && <p className="text-red-500 mt-2">{error}</p>}
+                    <ScrollArea className="h-[300px] mt-4">
+                      {isLoading ? (
+                        <div className="flex justify-center items-center h-full">
+                          <Loader2 className="w-6 h-6 animate-spin" />
+                        </div>
+                      ) : (
+                        searchResults.map((result, index) => (
+                          <div
+                            key={index}
+                            className="p-4 hover:bg-gray-100 cursor-pointer border-b"
+                            onClick={() => addSearchResult(result)}
+                          >
+                            <div className="flex items-center">
+                              <img
+                                src={result.photo.thumb}
+                                alt={result.food_name}
+                                className="w-12 h-12 object-cover rounded mr-4"
+                              />
+                              <div>
+                                <h3 className="font-bold text-lg">
+                                  {result.food_name}
+                                </h3>
+                                {result.brand_name && (
+                                  <p className="text-sm text-gray-600">
+                                    Brand: {result.brand_name}
+                                  </p>
+                                )}
+                                <p className="text-sm">
+                                  Serving: {result.serving_qty}{" "}
+                                  {result.serving_unit}
+                                </p>
+                                <p className="text-sm">
+                                  Calories: {result.nf_calories}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </ScrollArea>
+                  </DialogContent>
+                </Dialog>
+                <Dialog
+                  open={isBarcodeDialogOpen}
+                  onOpenChange={setIsBarcodeDialogOpen}
+                >
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="w-full md:w-auto">
+                      <Camera className="w-4 h-4 mr-2" />
+                      Scan Barcode
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Scan Barcode</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex flex-col items-center">
+                      <div ref={videoRef} className="w-full max-w-sm mb-4" />
+                      <Button
+                        onClick={startBarcodeScanner}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          "Start Scanning"
+                        )}
+                      </Button>
+                      {error && <p className="text-red-500 mt-2">{error}</p>}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </form>
           </CardContent>
         </Card>
