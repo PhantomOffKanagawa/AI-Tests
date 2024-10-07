@@ -39,6 +39,8 @@ import {
   Computer,
   Search,
   Drumstick,
+  Salad,
+  Hand,
 } from "lucide-react";
 import Layout from "@/components/Layout";
 
@@ -192,8 +194,10 @@ export default function MealPlanGenerator() {
       ? parseFloat(parseFloat(e.target.value).toFixed(2))
       : 0;
     newMeals[mealIndex].items[itemIndex].servings = newServings;
+    newMeals[mealIndex].items[itemIndex].mealReason = "manual";
 
-    foods[food.name].servings = e.target.value;
+    newFoods[food.name].servings = e.target.value;
+    newFoods[food.name].mealReason = "manual";
 
     setMeals(newMeals);
     setFoods(newFoods);
@@ -283,10 +287,12 @@ export default function MealPlanGenerator() {
     } else {
       // Dropped into a meal
       newFoods[foodItem.name].meal_display_group = newMeals[destMealIndex].name;
+      newFoods[foodItem.name].mealReason = "manual";
+      foodItem.mealReason = "manual";
       if (sourceMealIndex == -1)
         // If source was not a meal
         newFoods[foodItem.name].servings = foodItem.min_serving;
-      newFoods[foodItem.name].mealReason = "manual";
+      // newFoods[foodItem.name].mealReason = "manual";
       if (sourceId === destId) {
         // If dragging within the same meal, rearrange the item
         const currentItems = newMeals[destMealIndex].items;
@@ -416,6 +422,14 @@ export default function MealPlanGenerator() {
     if (food.inMeal && food.mealReason == "generated") {
       icon = addElement(<Computer className="h-4 w-4 inline me-2" />, icon);
     }
+
+    // if (food.inMeal) {
+    //   icon = addElement(<Salad className="h-4 w-4 inline me-2" />, icon);
+    // }
+
+    // if (food.mealReason == "manual") {
+    //   icon = addElement(<Hand className="h-4 w-4 inline me-2" />, icon);
+    // }
 
     return icon;
   };
@@ -594,7 +608,7 @@ export default function MealPlanGenerator() {
     for (const [food, foodData] of sortedFoods) {
       const servings = solution[food] * foodData.serving_step;
       if (servings && servings !== 0) {
-        const group = foodData.inMeal
+        const group = foodData.mealReason == "manual"
           ? foodData.meal_display_group
           : foodData.display_group || "Ungrouped";
 
@@ -616,6 +630,7 @@ export default function MealPlanGenerator() {
           mealReason: mealReason,
         });
 
+        newFoods[food].servings = parseFloat(servings.toFixed(2));
         newFoods[food].inMeal = true;
         newFoods[food].mealReason = mealReason;
       } else {
