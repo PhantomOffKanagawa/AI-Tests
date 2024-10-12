@@ -16,37 +16,26 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import {
   Command,
-  CommandDialog,
   CommandEmpty,
-  CommandGroup,
   CommandInput,
   CommandItem,
   CommandList,
-  CommandSeparator,
-  CommandShortcut,
 } from "@/components/ui/command";
 import {
   Plus,
   Minus,
   X,
   RotateCcw,
-  Download,
   Copy,
-  Save,
   Utensils,
   Lock,
   Heart,
   Computer,
   Search,
-  Drumstick,
-  Salad,
-  Hand,
   ChevronUp,
   ChevronDown,
   Equal,
@@ -59,63 +48,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-
-enum GenerateType {
-  OnlyIncrease = "increase",
-  OnlyDecrease = "decrease",
-  KeepEqual = "equal",
-  AnyWithinBounds = "bounded-any",
-}
-
-enum MealReason {
-  Manual = "manual",
-  Generated = "generated",
-}
-
-interface Food {
-  name: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  cost: number;
-  servings: number;
-  min_serving: number;
-  max_serving: number;
-  serving_step: number;
-  enabled: boolean;
-  required: boolean;
-  display_group: string;
-  meal_display_group: string; // Group that food is dragged into
-  group: string;
-  key: string; // Used for React key
-  draggable_id: string; // Used for Draggable key
-  inMeal: boolean; // Used to track if food dragged in meal
-  mealReason: MealReason; // Used to track how food got to meal
-  generateType: GenerateType; // Track what changes to make to food in generation, to be enum
-}
-
-interface Meal {
-  id: number;
-  name: string;
-  items: Food[];
-}
-
-interface Range {
-  min: number;
-  max: number;
-  total: number;
-}
+import { GenerateType, MealReason, FoodItem, GeneratorList, Range, GoalOptions, GoalRanges} from "@/lib/food-definitions";
 
 export default function MealPlanGenerator() {
-  const [foods, setFoods] = useState<{ [key: string]: Food }>({});
-  const [ranges, setRanges] = useState<{ [key: string]: Range }>({
+  const [foods, setFoods] = useState<{ [key: string]: FoodItem }>({});
+  const [ranges, setRanges] = useState< GoalRanges >({
     Calories: { min: 1700, max: 1800, total: 0 },
     Fat: { min: 30, max: 55, total: 0 },
     Carbs: { min: 120, max: 200, total: 0 },
     Protein: { min: 190, max: 210, total: 0 },
   });
-  const [meals, setMeals] = useState<Meal[]>([
+  const [meals, setMeals] = useState<GeneratorList[]>([
     { id: 1, name: "Breakfast", items: [] },
     { id: 3, name: "Lunch", items: [] },
     { id: 5, name: "Dinner", items: [] },
@@ -134,7 +77,7 @@ export default function MealPlanGenerator() {
     const storedFoods = localStorage.getItem("foods");
     const storedRanges = localStorage.getItem("ranges");
 
-    var foodsWithIds: { [key: string]: any } = {};
+    let foodsWithIds: { [key: string]: any } = {};
     if (storedFoods) {
       foodsWithIds = JSON.parse(storedFoods);
       // Convert the names to safe draggable IDs
@@ -209,11 +152,11 @@ export default function MealPlanGenerator() {
     }
 
     setMeals(newMeals);
-    setFoods(foods);
+    setFoods(newFoods);
   };
 
   // ! Will break if allow drag multiple instances of food
-  const updateServings = (e: any, meal: Meal, food: Food) => {
+  const updateServings = (e: any, meal: GeneratorList, food: FoodItem) => {
     const newMeals = [...meals];
     const newFoods = { ...foods };
 
@@ -236,8 +179,8 @@ export default function MealPlanGenerator() {
 
   const updateMinMaxServings = (
     e: any,
-    meal: Meal,
-    food: Food,
+    meal: GeneratorList,
+    food: FoodItem,
     max: boolean
   ) => {
     const newMeals = [...meals];
@@ -293,7 +236,8 @@ export default function MealPlanGenerator() {
   }, [meals, ranges]);
 
   const onDragEnd = (result: DropResult) => {
-    const { source, destination, draggableId } = result;
+    // const { source, destination, draggableId } = result;
+    const { source, destination } = result;
 
     // console.log(result);
 
@@ -310,15 +254,15 @@ export default function MealPlanGenerator() {
     const newMeals = [...meals];
 
     // Function to get food item from a given droppable
-    const getFood = (id: string, index: number): Food => {
+    const getFood = (id: string, index: number): FoodItem => {
       if (id === "required-foods") {
-        const filteredFoods: Food[] = requiredFoods;
+        const filteredFoods: FoodItem[] = requiredFoods;
         return filteredFoods[index]; // Use filtered array and index properly
       } else if (id === "all-foods") {
-        const filteredFoods: Food[] = filteredAllFoods;
+        const filteredFoods: FoodItem[] = filteredAllFoods;
         return filteredFoods[index]; // Use filtered array and index properly
       } else if (id === "disabled-foods") {
-        const filteredFoods: Food[] = disabledFoods;
+        const filteredFoods: FoodItem[] = disabledFoods;
         return filteredFoods[index]; // Use filtered array and index properly
       }
       const meal = meals.find((m) => m.id === parseInt(id));
@@ -380,7 +324,7 @@ export default function MealPlanGenerator() {
     setMeals(newMeals);
   };
 
-  const setGenerateType = (item: Food, meal: Meal, type: GenerateType) => {
+  const setGenerateType = (item: FoodItem, meal: GeneratorList, type: GenerateType) => {
     const newMeals = [...meals];
     const newFoods = { ...foods };
 
@@ -399,7 +343,7 @@ export default function MealPlanGenerator() {
     setFoods(newFoods);
   };
 
-  const removeFromMeal = (item: Food, meal: Meal) => {
+  const removeFromMeal = (item: FoodItem, meal: GeneratorList) => {
     const newMeals = meals.map((m) => {
       if (m.id === meal.id) {
         return { ...m, items: m.items.filter((i) => i.name !== item.name) };
@@ -412,7 +356,7 @@ export default function MealPlanGenerator() {
     setFoods(newFoods);
   };
 
-  const disableFood = (item: Food, meal?: Meal) => {
+  const disableFood = (item: FoodItem, meal?: GeneratorList) => {
     if (meal) {
       removeFromMeal(item, meal);
     }
@@ -433,24 +377,24 @@ export default function MealPlanGenerator() {
     .filter((food) => food.enabled && food.required && !food.inMeal)
     .sort((foodA, foodB) => foodA.name.localeCompare(foodB.name));
 
-  const toggleRequired = (item: Food) => {
+  const toggleRequired = (item: FoodItem) => {
     const newFoods = { ...foods };
     newFoods[item.name].required = !newFoods[item.name].required;
     setFoods(newFoods);
   };
 
-  const enableFood = (item: Food) => {
+  const enableFood = (item: FoodItem) => {
     const newFoods = { ...foods };
     newFoods[item.name].enabled = true;
     setFoods(newFoods);
   };
 
   const updateTarget = (
-    nutrient: string,
+    nutrient: GoalOptions,
     event: React.FocusEvent<HTMLSpanElement>,
     key: "min" | "max"
   ) => {
-    const newTarget = parseFloat(event.target.textContent || "0");
+    const newTarget = parseFloat(event.target.textContent ?? "0");
     if (!isNaN(newTarget)) {
       const newRanges = { ...ranges };
       if (key === "min" && newTarget > newRanges[nutrient].max) {
@@ -495,7 +439,7 @@ export default function MealPlanGenerator() {
     );
   };
 
-  const getIcon = (food: Food) => {
+  const getIcon = (food: FoodItem) => {
     let icon = <></>;
 
     if (!food.enabled) {
@@ -520,11 +464,11 @@ export default function MealPlanGenerator() {
   };
 
   const preprocessFoodsByGroup = (
-    foods: { [key: string]: Food },
-    heuristic: (a: Food, b: Food) => boolean
+    foods: { [key: string]: FoodItem },
+    heuristic: (a: FoodItem, b: FoodItem) => boolean
   ) => {
-    let selectedFoods: { [key: string]: Food } = {};
-    const groupFoods: { [key: string]: Food[] } = {};
+    let selectedFoods: { [key: string]: FoodItem } = {};
+    const groupFoods: { [key: string]: FoodItem[] } = {};
 
     for (const [food, food_data] of Object.entries(foods)) {
       if (!food_data.enabled && !food_data.inMeal) continue;
@@ -543,7 +487,7 @@ export default function MealPlanGenerator() {
       groupFoods[group].push({ ...food_data, name: food });
     }
 
-    for (const [group, foodsInGroup] of Object.entries(groupFoods)) {
+    for (const [, foodsInGroup] of Object.entries(groupFoods)) {
       let bestFood = foodsInGroup[0];
       let wasFoodInMeal = false;
 
@@ -566,13 +510,13 @@ export default function MealPlanGenerator() {
     return selectedFoods;
   };
 
-  const lowestProteinCostHeuristic = (currentFood: Food, bestFood: Food) => {
+  const lowestProteinCostHeuristic = (currentFood: FoodItem, bestFood: FoodItem) => {
     return (
       currentFood.protein / currentFood.cost > bestFood.protein / bestFood.cost
     );
   };
 
-  const solveMealPlan = (foods: { [key: string]: Food }) => {
+  const solveMealPlan = (foods: { [key: string]: FoodItem }) => {
     let problem: {
       optimize: string;
       opType: string;
@@ -698,7 +642,7 @@ export default function MealPlanGenerator() {
     displayMealPlan(solution, foods);
   };
 
-  const displayMealPlan = (solution: any, foods: { [key: string]: Food }) => {
+  const displayMealPlan = (solution: any, foods: { [key: string]: FoodItem }) => {
     const newMeals = meals.map((meal) => ({ ...meal, items: [] }));
     const newFoods = { ...foods };
 
@@ -717,7 +661,7 @@ export default function MealPlanGenerator() {
       "Evening snack",
     ];
 
-    const foodsByGroup: { [key: string]: Food[] } = {};
+    const foodsByGroup: { [key: string]: FoodItem[] } = {};
 
     const sortedFoods = Object.entries(foods).sort(([foodA], [foodB]) =>
       foodA.localeCompare(foodB)
@@ -760,7 +704,7 @@ export default function MealPlanGenerator() {
 
     const remainingGroups = Object.keys(foodsByGroup)
       .filter((group) => !predefinedGroupOrder.includes(group))
-      .sort();
+      .sort((a, b) => a.localeCompare(b));
 
     const groupOrder = [...predefinedGroupOrder, ...remainingGroups, "Ungrouped"];
 
@@ -781,7 +725,7 @@ export default function MealPlanGenerator() {
       console.log(`Meal: ${meal.name} is id: ${meal.id}`);
       meal.items = [];
       foodsByGroup[group].forEach((food) => {
-        if (!meal.items.some((item: Food) => item.name === food.name)) {
+        if (!meal.items.some((item: FoodItem) => item.name === food.name)) {
           meal.items.push(food as never); // Lol how does this work
         }
       });
@@ -826,7 +770,7 @@ export default function MealPlanGenerator() {
     }
   };
 
-  const addFoodToMeal = (food: Food, mealId: number) => {
+  const addFoodToMeal = (food: FoodItem, mealId: number) => {
     const newMeals = meals.map((meal) => {
       if (meal.id === mealId) {
         return {
@@ -1373,7 +1317,7 @@ export default function MealPlanGenerator() {
                                     e as unknown as KeyboardEvent
                                   )
                                 } // This is insane but what I want
-                                onBlur={(e) => updateTarget(key, e, "min")}
+                                onBlur={(e) => updateTarget(key as "Calories" | "Fat" | "Carbs" | "Protein", e, "min")}
                                 className="px-1 rounded bg-secondary"
                               >
                                 {quotas.min}
@@ -1382,7 +1326,7 @@ export default function MealPlanGenerator() {
                               <span
                                 contentEditable
                                 suppressContentEditableWarning
-                                onBlur={(e) => updateTarget(key, e, "max")}
+                                onBlur={(e) => updateTarget(key as "Calories" | "Fat" | "Carbs" | "Protein", e, "max")}
                                 className="px-1 rounded bg-secondary"
                               >
                                 {quotas.max}
