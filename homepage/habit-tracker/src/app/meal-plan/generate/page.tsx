@@ -48,11 +48,19 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { GenerateType, MealReason, FoodItem, GeneratorList, Range, GoalOptions, GoalRanges} from "@/lib/food-definitions";
+import {
+  GenerateType,
+  MealReason,
+  FoodItem,
+  GeneratorList,
+  Range,
+  GoalOptions,
+  GoalRanges,
+} from "@/lib/food-definitions";
 
 export default function MealPlanGenerator() {
   const [foods, setFoods] = useState<{ [key: string]: FoodItem }>({});
-  const [ranges, setRanges] = useState< GoalRanges >({
+  const [ranges, setRanges] = useState<GoalRanges>({
     Calories: { min: 1700, max: 1800, total: 0 },
     Fat: { min: 30, max: 55, total: 0 },
     Carbs: { min: 120, max: 200, total: 0 },
@@ -72,6 +80,13 @@ export default function MealPlanGenerator() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const allFoodsSearchInputRef = useRef<HTMLInputElement>(null);
+
+  enum foodDisplayType {
+    AllFood = "all-food",
+    RequiredFood = "required-food",
+    DisabledFood = "disabled-food",
+    InGeneratedList = "generated-list-food",
+  }
 
   useEffect(() => {
     const storedFoods = localStorage.getItem("foods");
@@ -235,6 +250,54 @@ export default function MealPlanGenerator() {
     setPrice(totalPrice);
   }, [meals, ranges]);
 
+  const generateFoodItem = (
+    foodItem: FoodItem,
+    type: foodDisplayType,
+    meal?: GeneratorList,
+    provided?: any
+  ) => {
+    switch (type) {
+      case foodDisplayType.AllFood: {
+        return (
+          <div
+            ref={provided.innerRef}
+            {...provided.draggableProps}
+            {...provided.dragHandleProps}
+            className="bg-secondary p-3 rounded-md"
+          >
+            <div className="flex justify-between items-center">
+              <span>
+                {getIcon(foodItem)}
+                {foodItem.name}
+              </span>
+              <div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => toggleRequired(foodItem)}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => disableFood(foodItem)}
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="text-sm text-muted-foreground mt-1">
+              Calories: {foodItem.calories}, Carbs: {foodItem.carbs}g, Protein:{" "}
+              {foodItem.protein}g, Fat: {foodItem.fat}g
+            </div>
+          </div>
+        );
+      }
+    }
+  };
+
   const onDragEnd = (result: DropResult) => {
     // const { source, destination, draggableId } = result;
     const { source, destination } = result;
@@ -324,7 +387,11 @@ export default function MealPlanGenerator() {
     setMeals(newMeals);
   };
 
-  const setGenerateType = (item: FoodItem, meal: GeneratorList, type: GenerateType) => {
+  const setGenerateType = (
+    item: FoodItem,
+    meal: GeneratorList,
+    type: GenerateType
+  ) => {
     const newMeals = [...meals];
     const newFoods = { ...foods };
 
@@ -510,7 +577,10 @@ export default function MealPlanGenerator() {
     return selectedFoods;
   };
 
-  const lowestProteinCostHeuristic = (currentFood: FoodItem, bestFood: FoodItem) => {
+  const lowestProteinCostHeuristic = (
+    currentFood: FoodItem,
+    bestFood: FoodItem
+  ) => {
     return (
       currentFood.protein / currentFood.cost > bestFood.protein / bestFood.cost
     );
@@ -618,7 +688,7 @@ export default function MealPlanGenerator() {
             };
             break;
           }
-      }
+        }
       }
       problem.ints[`${food}`] = 1;
 
@@ -642,7 +712,10 @@ export default function MealPlanGenerator() {
     displayMealPlan(solution, foods);
   };
 
-  const displayMealPlan = (solution: any, foods: { [key: string]: FoodItem }) => {
+  const displayMealPlan = (
+    solution: any,
+    foods: { [key: string]: FoodItem }
+  ) => {
     const newMeals = meals.map((meal) => ({ ...meal, items: [] }));
     const newFoods = { ...foods };
 
@@ -706,7 +779,11 @@ export default function MealPlanGenerator() {
       .filter((group) => !predefinedGroupOrder.includes(group))
       .sort((a, b) => a.localeCompare(b));
 
-    const groupOrder = [...predefinedGroupOrder, ...remainingGroups, "Ungrouped"];
+    const groupOrder = [
+      ...predefinedGroupOrder,
+      ...remainingGroups,
+      "Ungrouped",
+    ];
 
     groupOrder.forEach((group) => {
       if (!foodsByGroup[group]) return;
@@ -1004,74 +1081,121 @@ export default function MealPlanGenerator() {
                                             g, Fat: {item.fat}g
                                           </div>
                                           <div className="flex items-center space-x-2">
-                                          <Tooltip>
-                                            <TooltipTrigger asChild>
-                                              <Button
-                                                size="icon"
-                                                variant="outline"
-                                                className={item.generateType == "increase" ? "bg-neutral-200" : ""}
-                                                onClick={() =>
-                                                  setGenerateType(item, meal, GenerateType.OnlyIncrease)
-                                                }
-                                              >
-                                                <ChevronUp className="h-4 w-4" />
-                                              </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                              <p>Only Allow Generator to Increase to Max Servings</p>
-                                            </TooltipContent>
-                                          </Tooltip>
-                                          <Tooltip>
-                                            <TooltipTrigger asChild>
-                                              <Button
-                                                size="icon"
-                                                variant="outline"
-                                                className={item.generateType == "decrease" ? "bg-neutral-200" : ""}
-                                                onClick={() =>
-                                                  setGenerateType(item, meal, GenerateType.OnlyDecrease)
-                                                }
-                                              >
-                                                <ChevronDown className="h-4 w-4" />
-                                              </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                              <p>Only Allow Generator to Decrease to Min Servings</p>
-                                            </TooltipContent>
-                                          </Tooltip>
-                                          <Tooltip>
-                                            <TooltipTrigger asChild>
-                                              <Button
-                                                size="icon"
-                                                variant="outline"
-                                                className={item.generateType == "equal" ? "bg-neutral-200" : ""}
-                                                onClick={() =>
-                                                  setGenerateType(item, meal, GenerateType.KeepEqual)
-                                                }
-                                              >
-                                                <Equal className="h-4 w-4" />
-                                              </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                              <p>Only Allow Generator to Keep Serving Count</p>
-                                            </TooltipContent>
-                                          </Tooltip>
-                                          <Tooltip>
-                                            <TooltipTrigger asChild>
-                                              <Button
-                                                size="icon"
-                                                variant="outline"
-                                                className={item.generateType == "bounded-any" ? "bg-neutral-200" : ""}
-                                                onClick={() =>
-                                                  setGenerateType(item, meal, GenerateType.AnyWithinBounds)
-                                                }
-                                              >
-                                                <ChevronsUpDown className="h-4 w-4" />
-                                              </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                              <p>Allow Generator to Set Any Value Between Min and Max</p>
-                                            </TooltipContent>
-                                          </Tooltip>
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Button
+                                                  size="icon"
+                                                  variant="outline"
+                                                  className={
+                                                    item.generateType ==
+                                                    "increase"
+                                                      ? "bg-neutral-200"
+                                                      : ""
+                                                  }
+                                                  onClick={() =>
+                                                    setGenerateType(
+                                                      item,
+                                                      meal,
+                                                      GenerateType.OnlyIncrease
+                                                    )
+                                                  }
+                                                >
+                                                  <ChevronUp className="h-4 w-4" />
+                                                </Button>
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>
+                                                  Only Allow Generator to
+                                                  Increase to Max Servings
+                                                </p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Button
+                                                  size="icon"
+                                                  variant="outline"
+                                                  className={
+                                                    item.generateType ==
+                                                    "decrease"
+                                                      ? "bg-neutral-200"
+                                                      : ""
+                                                  }
+                                                  onClick={() =>
+                                                    setGenerateType(
+                                                      item,
+                                                      meal,
+                                                      GenerateType.OnlyDecrease
+                                                    )
+                                                  }
+                                                >
+                                                  <ChevronDown className="h-4 w-4" />
+                                                </Button>
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>
+                                                  Only Allow Generator to
+                                                  Decrease to Min Servings
+                                                </p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Button
+                                                  size="icon"
+                                                  variant="outline"
+                                                  className={
+                                                    item.generateType == "equal"
+                                                      ? "bg-neutral-200"
+                                                      : ""
+                                                  }
+                                                  onClick={() =>
+                                                    setGenerateType(
+                                                      item,
+                                                      meal,
+                                                      GenerateType.KeepEqual
+                                                    )
+                                                  }
+                                                >
+                                                  <Equal className="h-4 w-4" />
+                                                </Button>
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>
+                                                  Only Allow Generator to Keep
+                                                  Serving Count
+                                                </p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Button
+                                                  size="icon"
+                                                  variant="outline"
+                                                  className={
+                                                    item.generateType ==
+                                                    "bounded-any"
+                                                      ? "bg-neutral-200"
+                                                      : ""
+                                                  }
+                                                  onClick={() =>
+                                                    setGenerateType(
+                                                      item,
+                                                      meal,
+                                                      GenerateType.AnyWithinBounds
+                                                    )
+                                                  }
+                                                >
+                                                  <ChevronsUpDown className="h-4 w-4" />
+                                                </Button>
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>
+                                                  Allow Generator to Set Any
+                                                  Value Between Min and Max
+                                                </p>
+                                              </TooltipContent>
+                                            </Tooltip>
                                           </div>
                                         </div>
                                       </div>
@@ -1150,43 +1274,14 @@ export default function MealPlanGenerator() {
                                 draggableId={item.draggable_id}
                                 index={index}
                               >
-                                {(provided) => (
-                                  <div
-                                    ref={provided.innerRef}
-                                    {...provided.draggableProps}
-                                    {...provided.dragHandleProps}
-                                    className="bg-secondary p-3 rounded-md"
-                                  >
-                                    <div className="flex justify-between items-center">
-                                      <span>
-                                        {getIcon(item)}
-                                        {item.name}
-                                      </span>
-                                      <div>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={() => toggleRequired(item)}
-                                        >
-                                          <Plus className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={() => disableFood(item)}
-                                        >
-                                          <Minus className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    </div>
-
-                                    <div className="text-sm text-muted-foreground mt-1">
-                                      Calories: {item.calories}, Carbs:{" "}
-                                      {item.carbs}g, Protein: {item.protein}g,
-                                      Fat: {item.fat}g
-                                    </div>
-                                  </div>
-                                )}
+                                {(provided) =>
+                                  generateFoodItem(
+                                    item,
+                                    foodDisplayType.AllFood,
+                                    undefined,
+                                    provided
+                                  )
+                                }
                               </Draggable>
                             ))}
                             {provided.placeholder}
@@ -1317,7 +1412,17 @@ export default function MealPlanGenerator() {
                                     e as unknown as KeyboardEvent
                                   )
                                 } // This is insane but what I want
-                                onBlur={(e) => updateTarget(key as "Calories" | "Fat" | "Carbs" | "Protein", e, "min")}
+                                onBlur={(e) =>
+                                  updateTarget(
+                                    key as
+                                      | "Calories"
+                                      | "Fat"
+                                      | "Carbs"
+                                      | "Protein",
+                                    e,
+                                    "min"
+                                  )
+                                }
                                 className="px-1 rounded bg-secondary"
                               >
                                 {quotas.min}
@@ -1326,7 +1431,17 @@ export default function MealPlanGenerator() {
                               <span
                                 contentEditable
                                 suppressContentEditableWarning
-                                onBlur={(e) => updateTarget(key as "Calories" | "Fat" | "Carbs" | "Protein", e, "max")}
+                                onBlur={(e) =>
+                                  updateTarget(
+                                    key as
+                                      | "Calories"
+                                      | "Fat"
+                                      | "Carbs"
+                                      | "Protein",
+                                    e,
+                                    "max"
+                                  )
+                                }
                                 className="px-1 rounded bg-secondary"
                               >
                                 {quotas.max}
