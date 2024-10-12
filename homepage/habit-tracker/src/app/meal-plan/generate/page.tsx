@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef, ReactElement } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  ReactElement,
+} from "react";
 import {
   DragDropContext,
   Droppable,
@@ -41,8 +47,25 @@ import {
   Drumstick,
   Salad,
   Hand,
+  ChevronUp,
+  ChevronDown,
+  Equal,
+  ChevronsUpDown,
 } from "lucide-react";
 import Layout from "@/components/Layout";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+enum GenerateType {
+  OnlyIncrease = "increase",
+  OnlyDecrease = "decrease",
+  KeepEqual = "equal",
+  AnyWithinBounds = "bounded-any"
+}
 
 interface Food {
   name: string;
@@ -58,12 +81,13 @@ interface Food {
   enabled: boolean;
   required: boolean;
   display_group: string;
-  meal_display_group: string;
+  meal_display_group: string; // Group that food is dragged into
   group: string;
   key: string; // Used for React key
   draggable_id: string; // Used for Draggable key
   inMeal: boolean; // Used to track if food dragged in meal
   mealReason: string; // Used to track how food got to meal
+  generateType: GenerateType; // Track what changes to make to food in generation, to be enum
 }
 
 interface Meal {
@@ -112,6 +136,8 @@ export default function MealPlanGenerator() {
 
       for (let key in foodsWithIds) {
         foodsWithIds[key].name = key;
+        foodsWithIds[key].inMeal = false;
+        foodsWithIds[key].generateType = GenerateType.AnyWithinBounds;
 
         // const draggableId = foodName.replace(/\s+/g, "_");
         const draggableId = encodeURIComponent(key);
@@ -198,6 +224,38 @@ export default function MealPlanGenerator() {
 
     newFoods[food.name].servings = e.target.value;
     newFoods[food.name].mealReason = "manual";
+
+    setMeals(newMeals);
+    setFoods(newFoods);
+  };
+
+  const updateMinMaxServings = (
+    e: any,
+    meal: Meal,
+    food: Food,
+    max: boolean
+  ) => {
+    const newMeals = [...meals];
+    const newFoods = { ...foods };
+
+    const mealIndex = newMeals.findIndex((m) => m.id === meal.id);
+    const itemIndex = newMeals[mealIndex].items.findIndex(
+      (i) => i.name === food.name
+    );
+
+    if (max) {
+      const newServings: number = e.target.textContent
+        ? parseFloat(parseFloat(e.target.textContent).toFixed(2))
+        : 0;
+      newMeals[mealIndex].items[itemIndex].max_serving = newServings;
+      newFoods[food.name].max_serving = newServings;
+    } else {
+      const newServings: number = e.target.textContent
+        ? parseFloat(parseFloat(e.target.textContent).toFixed(2))
+        : 0;
+      newMeals[mealIndex].items[itemIndex].min_serving = newServings;
+      newFoods[food.name].min_serving = newServings;
+    }
 
     setMeals(newMeals);
     setFoods(newFoods);
@@ -317,6 +375,25 @@ export default function MealPlanGenerator() {
     setMeals(newMeals);
   };
 
+  const setGenerateType = (item: Food, meal: Meal, type: GenerateType) => {
+    const newMeals = [...meals];
+    const newFoods = { ...foods };
+
+    const mealIndex = newMeals.findIndex((m) => m.id === meal.id);
+    const itemIndex = newMeals[mealIndex].items.findIndex(
+      (i) => i.name === item.name
+    );
+
+    newMeals[mealIndex].items[itemIndex].generateType = type;
+    newMeals[mealIndex].items[itemIndex].mealReason = "manual";
+
+    newFoods[item.name].generateType = type;
+    newFoods[item.name].mealReason = "manual";
+
+    setMeals(newMeals);
+    setFoods(newFoods);
+  };
+
   const removeFromMeal = (item: Food, meal: Meal) => {
     const newMeals = meals.map((m) => {
       if (m.id === meal.id) {
@@ -401,14 +478,17 @@ export default function MealPlanGenerator() {
     return segments;
   };
 
-  const addElement = (originalElement : ReactElement, newElement : ReactElement) => {
+  const addElement = (
+    originalElement: ReactElement,
+    newElement: ReactElement
+  ) => {
     return (
       <>
         {originalElement}
         {newElement}
       </>
     );
-  }
+  };
 
   const getIcon = (food: Food) => {
     let icon = <></>;
@@ -488,7 +568,15 @@ export default function MealPlanGenerator() {
   };
 
   const solveMealPlan = (foods: { [key: string]: Food }) => {
-    let problem: { optimize: string, opType: string, constraints: { [key: string]: { min?: number; max?: number, equal?: number } }, "variables": any, "ints": any } = {
+    let problem: {
+      optimize: string;
+      opType: string;
+      constraints: {
+        [key: string]: { min?: number; max?: number; equal?: number };
+      };
+      variables: any;
+      ints: any;
+    } = {
       optimize: "cost",
       opType: "min",
       constraints: {
@@ -549,13 +637,39 @@ export default function MealPlanGenerator() {
 
       if (!inMeal) {
         problem.constraints[food] = {
-          min: min_serving as number,
-          max: max_serving as number,
+          min: min_serving,
+          max: max_serving,
         };
       } else {
-        problem.constraints[food] = {
-          equal: food_data.servings as number,
-        };
+        switch (food_data.generateType) {
+          case GenerateType.KeepEqual: {
+            problem.constraints[food] = {
+              equal: food_data.servings,
+            };
+            break;
+          }
+          case GenerateType.AnyWithinBounds: {
+            problem.constraints[food] = {
+              min: min_serving,
+              max: max_serving,
+            };
+            break;
+          }
+          case GenerateType.OnlyIncrease: {
+            problem.constraints[food] = {
+              min: food_data.servings,
+              max: max_serving,
+            };
+            break;
+          }
+          case GenerateType.OnlyDecrease: {
+            problem.constraints[food] = {
+              min: min_serving,
+              max: food_data.servings,
+            };
+            break;
+          }
+      }
       }
       problem.ints[`${food}`] = 1;
 
@@ -572,7 +686,6 @@ export default function MealPlanGenerator() {
       }
     }
 
-    
     const solution = solver.Solve(problem); // Can't find a way to fix as the library can't be imported to react, different lib?
     console.log(problem);
     console.log(solution);
@@ -608,9 +721,10 @@ export default function MealPlanGenerator() {
     for (const [food, foodData] of sortedFoods) {
       const servings = solution[food] * foodData.serving_step;
       if (servings && servings !== 0) {
-        const group = foodData.mealReason == "manual"
-          ? foodData.meal_display_group
-          : foodData.display_group || "Ungrouped";
+        const group =
+          foodData.mealReason == "manual"
+            ? foodData.meal_display_group
+            : foodData.display_group || "Ungrouped";
 
         if (!foodsByGroup[group]) {
           foodsByGroup[group] = [];
@@ -633,6 +747,7 @@ export default function MealPlanGenerator() {
         newFoods[food].servings = parseFloat(servings.toFixed(2));
         newFoods[food].inMeal = true;
         newFoods[food].mealReason = mealReason;
+        newFoods[food].meal_display_group = group;
       } else {
         newFoods[food].inMeal = false;
       }
@@ -642,7 +757,7 @@ export default function MealPlanGenerator() {
       .filter((group) => !predefinedGroupOrder.includes(group))
       .sort();
 
-    const groupOrder = [...predefinedGroupOrder, ...remainingGroups];
+    const groupOrder = [...predefinedGroupOrder, ...remainingGroups, "Ungrouped"];
 
     groupOrder.forEach((group) => {
       if (!foodsByGroup[group]) return;
@@ -739,410 +854,557 @@ export default function MealPlanGenerator() {
   );
 
   return (
-    <DragDropContext onDragEnd={onDragEnd}>
-      <script src="/js/solver.js"></script>
-      <Layout>
-        <div className="container mx-auto px-4 py-8 max-h-screen">
-          <h1 className="text-3xl font-bold mb-6">
-            Enhanced Enhanced Meal Planner
-          </h1>
-          <div className="flex flex-col lg:flex-row gap-8">
-            <div className="w-full lg:w-2/3 h-full">
-              <Card>
-                <CardHeader className="bg-primary text-primary-foreground mb-4 rounded">
-                  <CardTitle className="text-2xl flex items-center justify-between">
-                    <span>Meals</span>
-                    <span className="text-xl font-normal">
-                      Total: ${price.toFixed(2)}
-                    </span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[600px] h-full pr-4">
-                    {meals.map((meal) => (
-                      <div key={meal.id} className="mb-6">
-                        <div className="flex justify-between items-center mb-4">
-                          <h3 className="text-xl font-semibold mb-4 text-gray-700 flex items-center">
-                            <Utensils className="mr-2 h-5 w-5" />
-                            {meal.name}
-                          </h3>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleSearch(meal.id)}
-                            className="flex items-center"
-                          >
-                            {activeMealSearch === meal.id ? (
-                              <X className="h-4 w-4 mr-1" />
-                            ) : (
-                              <Plus className="h-4 w-4 mr-1" />
-                            )}
-                            {activeMealSearch === meal.id ? "Close" : "Add"}
-                          </Button>
-                        </div>
-                        <Droppable droppableId={meal.id.toString()}>
-                          {(provided) => (
-                            <div
-                              {...provided.droppableProps}
-                              ref={provided.innerRef}
-                              className="min-h-20 bg-secondary rounded-md relative"
+    <TooltipProvider>
+      <DragDropContext onDragEnd={onDragEnd}>
+        <script src="/js/solver.js"></script>
+        <Layout>
+          <div className="container mx-auto px-4 py-8 max-h-screen">
+            <h1 className="text-3xl font-bold mb-6">
+              Enhanced Enhanced Meal Planner
+            </h1>
+            <div className="flex flex-col lg:flex-row gap-8">
+              <div className="w-full lg:w-2/3 h-full">
+                <Card>
+                  <CardHeader className="bg-primary text-primary-foreground mb-4 rounded">
+                    <CardTitle className="text-2xl flex items-center justify-between">
+                      <span>Meals</span>
+                      <span className="text-xl font-normal">
+                        Total: ${price.toFixed(2)}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[600px] h-full pr-4">
+                      {meals.map((meal) => (
+                        <div key={meal.id} className="mb-6">
+                          <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-semibold mb-4 text-gray-700 flex items-center">
+                              <Utensils className="mr-2 h-5 w-5" />
+                              {meal.name}
+                            </h3>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleSearch(meal.id)}
+                              className="flex items-center"
                             >
-                              {activeMealSearch === meal.id && (
-                                // Add "absolute if want overlay food items"
-                                <div className="w-full z-20">
-                                  <Command
-                                    onKeyDown={handleSearchKeyDown}
-                                    className="border"
-                                  >
-                                    <CommandInput
-                                      placeholder="Search..."
-                                      ref={searchInputRef}
-                                    />
-                                    <CommandList>
-                                      <CommandEmpty>
-                                        No results found.
-                                      </CommandEmpty>
-                                      {filteredFoods.map((food, index) => (
-                                        <CommandItem
-                                          key={food.name}
-                                          onSelect={() =>
-                                            addFoodToMeal(food, meal.id)
-                                          }
-                                        >
-                                          {food.name}
-                                        </CommandItem>
-                                      ))}
-                                    </CommandList>
-                                  </Command>
-                                </div>
+                              {activeMealSearch === meal.id ? (
+                                <X className="h-4 w-4 mr-1" />
+                              ) : (
+                                <Plus className="h-4 w-4 mr-1" />
                               )}
-                              {meal.items.map((item, index) => (
-                                <Draggable
-                                  key={item.draggable_id}
-                                  draggableId={item.draggable_id + "_meal"}
-                                  index={index}
-                                >
-                                  {(provided) => (
-                                    <div
-                                      ref={provided.innerRef}
-                                      {...provided.draggableProps}
-                                      {...provided.dragHandleProps}
-                                      className="bg-secondary p-3 rounded-md"
+                              {activeMealSearch === meal.id ? "Close" : "Add"}
+                            </Button>
+                          </div>
+                          <Droppable droppableId={meal.id.toString()}>
+                            {(provided) => (
+                              <div
+                                {...provided.droppableProps}
+                                ref={provided.innerRef}
+                                className="min-h-20 bg-secondary rounded-md relative"
+                              >
+                                {activeMealSearch === meal.id && (
+                                  // Add "absolute if want overlay food items"
+                                  <div className="w-full z-20">
+                                    <Command
+                                      onKeyDown={handleSearchKeyDown}
+                                      className="border"
                                     >
-                                      <div className="flex justify-between items-center">
-                                        <span className="font-medium">
-                                          {getIcon(item)}
-                                          {item.name}
-                                        </span>
-                                        <div className="flex items-center space-x-2">
-                                          <Input
-                                            type="number"
-                                            value={item.servings}
-                                            // # Limit by min/max or no?
-                                            // min={item.min_serving}
-                                            // max={item.max_serving}
-                                            min={0}
-                                            max={9999}
-                                            step={item.serving_step}
-                                            onChange={(e) =>
-                                              updateServings(e, meal, item)
-                                            }
-                                            className="w-20"
-                                          />
-                                          <Button
-                                            size="icon"
-                                            variant="outline"
-                                            onClick={() =>
-                                              disableFood(item, meal)
+                                      <CommandInput
+                                        placeholder="Search..."
+                                        ref={searchInputRef}
+                                      />
+                                      <CommandList>
+                                        <CommandEmpty>
+                                          No results found.
+                                        </CommandEmpty>
+                                        {filteredFoods.map((food, index) => (
+                                          <CommandItem
+                                            key={food.name}
+                                            onSelect={() =>
+                                              addFoodToMeal(food, meal.id)
                                             }
                                           >
-                                            <Minus className="h-4 w-4" />
-                                          </Button>
-                                          <Button
-                                            size="icon"
-                                            variant="outline"
-                                            onClick={() =>
-                                              removeFromMeal(item, meal)
-                                            }
-                                          >
-                                            <X className="h-4 w-4" />
-                                          </Button>
+                                            {food.name}
+                                          </CommandItem>
+                                        ))}
+                                      </CommandList>
+                                    </Command>
+                                  </div>
+                                )}
+                                {meal.items.map((item, index) => (
+                                  <Draggable
+                                    key={item.draggable_id}
+                                    draggableId={item.draggable_id + "_meal"}
+                                    index={index}
+                                  >
+                                    {(provided) => (
+                                      <div
+                                        ref={provided.innerRef}
+                                        {...provided.draggableProps}
+                                        {...provided.dragHandleProps}
+                                        className="bg-secondary p-3 rounded-md"
+                                      >
+                                        <div className="flex justify-between items-center">
+                                          <span className="font-medium">
+                                            {getIcon(item)}
+                                            {item.name}
+                                          </span>
+                                          <div className="flex items-center space-x-2">
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <div>
+                                                  <div
+                                                    contentEditable
+                                                    suppressContentEditableWarning
+                                                    onKeyDown={(e) =>
+                                                      restrictToNumbers(
+                                                        e as unknown as KeyboardEvent
+                                                      )
+                                                    } // This is insane but what I want
+                                                    onBlur={(e) =>
+                                                      updateMinMaxServings(
+                                                        e,
+                                                        meal,
+                                                        item,
+                                                        true
+                                                      )
+                                                    }
+                                                    className="text-sm text-muted-foreground"
+                                                  >
+                                                    {item.max_serving.toFixed(
+                                                      1
+                                                    )}
+                                                  </div>
+                                                  <div
+                                                    contentEditable
+                                                    suppressContentEditableWarning
+                                                    onKeyDown={(e) =>
+                                                      restrictToNumbers(
+                                                        e as unknown as KeyboardEvent
+                                                      )
+                                                    } // This is insane but what I want
+                                                    onBlur={(e) =>
+                                                      updateMinMaxServings(
+                                                        e,
+                                                        meal,
+                                                        item,
+                                                        false
+                                                      )
+                                                    }
+                                                    className="text-sm text-muted-foreground"
+                                                  >
+                                                    {item.min_serving.toFixed(
+                                                      1
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>Max / Min Serving</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Input
+                                                  type="number"
+                                                  value={item.servings}
+                                                  // # Limit by min/max or no?
+                                                  // min={item.min_serving}
+                                                  // max={item.max_serving}
+                                                  min={0}
+                                                  max={9999}
+                                                  step={item.serving_step}
+                                                  onChange={(e) =>
+                                                    updateServings(
+                                                      e,
+                                                      meal,
+                                                      item
+                                                    )
+                                                  }
+                                                  className="w-20"
+                                                />
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>Servings</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Button
+                                                  size="icon"
+                                                  variant="outline"
+                                                  onClick={() =>
+                                                    removeFromMeal(item, meal)
+                                                  }
+                                                >
+                                                  <X className="h-4 w-4" />
+                                                </Button>
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>Remove From Meal</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          </div>
+                                        </div>
+                                        <div className="flex justify-between space-x-2">
+                                          <div className="text-sm text-muted-foreground mt-1 inline">
+                                            Calories: {item.calories}, Carbs:{" "}
+                                            {item.carbs}g, Protein:{" "}
+                                            {item.protein}
+                                            g, Fat: {item.fat}g
+                                          </div>
+                                          <div className="flex items-center space-x-2">
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                size="icon"
+                                                variant="outline"
+                                                className={item.generateType == "increase" ? "bg-neutral-200" : ""}
+                                                onClick={() =>
+                                                  setGenerateType(item, meal, GenerateType.OnlyIncrease)
+                                                }
+                                              >
+                                                <ChevronUp className="h-4 w-4" />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>Only Allow Generator to Increase to Max Servings</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                size="icon"
+                                                variant="outline"
+                                                className={item.generateType == "decrease" ? "bg-neutral-200" : ""}
+                                                onClick={() =>
+                                                  setGenerateType(item, meal, GenerateType.OnlyDecrease)
+                                                }
+                                              >
+                                                <ChevronDown className="h-4 w-4" />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>Only Allow Generator to Decrease to Min Servings</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                size="icon"
+                                                variant="outline"
+                                                className={item.generateType == "equal" ? "bg-neutral-200" : ""}
+                                                onClick={() =>
+                                                  setGenerateType(item, meal, GenerateType.KeepEqual)
+                                                }
+                                              >
+                                                <Equal className="h-4 w-4" />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>Only Allow Generator to Keep Serving Count</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                size="icon"
+                                                variant="outline"
+                                                className={item.generateType == "bounded-any" ? "bg-neutral-200" : ""}
+                                                onClick={() =>
+                                                  setGenerateType(item, meal, GenerateType.AnyWithinBounds)
+                                                }
+                                              >
+                                                <ChevronsUpDown className="h-4 w-4" />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>Allow Generator to Set Any Value Between Min and Max</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                          </div>
                                         </div>
                                       </div>
-                                      <div className="text-sm text-muted-foreground mt-1">
-                                        Calories: {item.calories}, Carbs:{" "}
-                                        {item.carbs}g, Protein: {item.protein}g,
-                                        Fat: {item.fat}g
-                                      </div>
-                                      {/* <span>Calories: {item.calories}</span>
-                                      <span>Carbs: {item.carbs}g</span>
-                                      <span>Protein: {item.protein}g</span>
-                                      <span>Fat: {item.fat}g</span> */}
-                                    </div>
-                                  )}
-                                </Draggable>
-                              ))}
-                              {provided.placeholder}
-                            </div>
-                          )}
-                        </Droppable>
-                      </div>
-                    ))}
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-              <Button
-                onClick={startSolve}
-                className="w-full mt-4 transition-colors duration-200"
-              >
-                Generate Meal Plan
-              </Button>
-            </div>
-            <div className="w-full lg:w-1/3 space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex justify-between items-center">
-                    <span>All Foods</span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setShowAllFoodsSearch(!showAllFoodsSearch)}
-                    >
-                      <Search className="h-4 w-4" />
-                    </Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6 pt-0">
-                  {showAllFoodsSearch && (
-                    <div className="mb-4">
-                      <Input
-                        type="text"
-                        placeholder="Search foods..."
-                        value={allFoodsSearchTerm}
-                        onChange={(e) => setAllFoodsSearchTerm(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key == "Escape") {
-                            setShowAllFoodsSearch(false);
+                                    )}
+                                  </Draggable>
+                                ))}
+                                {provided.placeholder}
+                              </div>
+                            )}
+                          </Droppable>
+                        </div>
+                      ))}
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+                <Button
+                  onClick={startSolve}
+                  className="w-full mt-4 transition-colors duration-200"
+                >
+                  Generate Meal Plan
+                </Button>
+                <Button
+                  onClick={clearMeals}
+                  className="w-full mt-4 transition-colors duration-200"
+                >
+                  Clear
+                </Button>
+              </div>
+              <div className="w-full lg:w-1/3 space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex justify-between items-center">
+                      <span>All Foods</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setShowAllFoodsSearch(!showAllFoodsSearch)
+                        }
+                      >
+                        <Search className="h-4 w-4" />
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 pt-0">
+                    {showAllFoodsSearch && (
+                      <div className="mb-4">
+                        <Input
+                          type="text"
+                          placeholder="Search foods..."
+                          value={allFoodsSearchTerm}
+                          onChange={(e) =>
+                            setAllFoodsSearchTerm(e.target.value)
                           }
-                        }}
-                        className="w-full"
-                        ref={allFoodsSearchInputRef}
-                      />
-                    </div>
-                  )}
-                  <ScrollArea className="h-[200px]">
-                    <Droppable droppableId="all-foods">
-                      {(provided) => (
-                        <div
-                          {...provided.droppableProps}
-                          ref={provided.innerRef}
-                          className="space-y-2 h-full"
-                        >
-                          {filteredAllFoods.map((item, index) => (
-                            <Draggable
-                              key={item.draggable_id}
-                              draggableId={item.draggable_id}
-                              index={index}
-                            >
-                              {(provided) => (
-                                    <div
-                                      ref={provided.innerRef}
-                                      {...provided.draggableProps}
-                                      {...provided.dragHandleProps}
-                                      className="bg-secondary p-3 rounded-md"
-                                    >
-                                      <div className="flex justify-between items-center">
-                                  <span>
-                                    {getIcon(item)}
-                                    {item.name}
-                                  </span>
-                                  <div>
+                          onKeyDown={(e) => {
+                            if (e.key == "Escape") {
+                              setShowAllFoodsSearch(false);
+                            }
+                          }}
+                          className="w-full"
+                          ref={allFoodsSearchInputRef}
+                        />
+                      </div>
+                    )}
+                    <ScrollArea className="h-[200px]">
+                      <Droppable droppableId="all-foods">
+                        {(provided) => (
+                          <div
+                            {...provided.droppableProps}
+                            ref={provided.innerRef}
+                            className="space-y-2 h-full"
+                          >
+                            {filteredAllFoods.map((item, index) => (
+                              <Draggable
+                                key={item.draggable_id}
+                                draggableId={item.draggable_id}
+                                index={index}
+                              >
+                                {(provided) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    className="bg-secondary p-3 rounded-md"
+                                  >
+                                    <div className="flex justify-between items-center">
+                                      <span>
+                                        {getIcon(item)}
+                                        {item.name}
+                                      </span>
+                                      <div>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => toggleRequired(item)}
+                                        >
+                                          <Plus className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => disableFood(item)}
+                                        >
+                                          <Minus className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    </div>
+
+                                    <div className="text-sm text-muted-foreground mt-1">
+                                      Calories: {item.calories}, Carbs:{" "}
+                                      {item.carbs}g, Protein: {item.protein}g,
+                                      Fat: {item.fat}g
+                                    </div>
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
+                          </div>
+                        )}
+                      </Droppable>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Required Foods</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[200px]">
+                      <Droppable droppableId="required-foods">
+                        {(provided) => (
+                          <div
+                            {...provided.droppableProps}
+                            ref={provided.innerRef}
+                            className="h-full space-y-2"
+                          >
+                            {requiredFoods.map((item, index) => (
+                              <Draggable
+                                key={item.draggable_id}
+                                draggableId={item.draggable_id}
+                                index={index}
+                              >
+                                {(provided) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    className={`bg-secondary p-2 rounded-md flex justify-between items-center ${
+                                      item.inMeal ? "opacity-50" : ""
+                                    }`}
+                                  >
+                                    <span>
+                                      {getIcon(item)}
+                                      {item.name} - Calories: {item.calories}
+                                    </span>
                                     <Button
                                       size="sm"
                                       variant="ghost"
                                       onClick={() => toggleRequired(item)}
                                     >
-                                      <Plus className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => disableFood(item)}
-                                    >
                                       <Minus className="h-4 w-4" />
                                     </Button>
                                   </div>
-                                  </div>
-                                  
-                                  <div className="text-sm text-muted-foreground mt-1">
-                                        Calories: {item.calories}, Carbs:{" "}
-                                        {item.carbs}g, Protein: {item.protein}g,
-                                        Fat: {item.fat}g
-                                      </div>
-                                </div>
-                              )}
-                            </Draggable>
-                          ))}
-                          {provided.placeholder}
-                        </div>
-                      )}
-                    </Droppable>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Required Foods</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[200px]">
-                    <Droppable droppableId="required-foods">
-                      {(provided) => (
-                        <div
-                          {...provided.droppableProps}
-                          ref={provided.innerRef}
-                          className="h-full space-y-2"
-                        >
-                          {requiredFoods.map((item, index) => (
-                            <Draggable
-                              key={item.draggable_id}
-                              draggableId={item.draggable_id}
-                              index={index}
-                            >
-                              {(provided) => (
-                                <div
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  {...provided.dragHandleProps}
-                                  className={`bg-secondary p-2 rounded-md flex justify-between items-center ${
-                                    item.inMeal ? "opacity-50" : ""
-                                  }`}
-                                >
-                                  <span>
-                                    {getIcon(item)}
-                                    {item.name} - Calories: {item.calories}
-                                  </span>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => toggleRequired(item)}
-                                  >
-                                    <Minus className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              )}
-                            </Draggable>
-                          ))}
-                          {provided.placeholder}
-                        </div>
-                      )}
-                    </Droppable>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Disabled Foods</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[100px]">
-                    <Droppable droppableId="disabled-foods">
-                      {(provided) => (
-                        <div
-                          {...provided.droppableProps}
-                          ref={provided.innerRef}
-                          className="space-y-2 h-full"
-                        >
-                          {disabledFoods.map((item, index) => (
-                            <Draggable
-                              key={item.draggable_id}
-                              draggableId={item.draggable_id}
-                              index={index}
-                            >
-                              {(provided) => (
-                                <div
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  {...provided.dragHandleProps}
-                                  className={`bg-secondary p-2 rounded-md flex justify-between items-center ${
-                                    item.inMeal ? "opacity-50" : ""
-                                  }`}
-                                >
-                                  <span>
-                                    {getIcon(item)}
-                                    {item.name} - Calories: {item.calories}
-                                  </span>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => enableFood(item)}
-                                  >
-                                    <RotateCcw className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              )}
-                            </Draggable>
-                          ))}
-                        </div>
-                      )}
-                    </Droppable>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Nutrition Quota</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {Object.entries(ranges).map(([key, quotas]) => (
-                      <div key={key}>
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-medium">{key}</span>
-                          <div className="text-sm">
-                            <span
-                              contentEditable
-                              suppressContentEditableWarning
-                              onKeyDown={(e) => restrictToNumbers(e as unknown as KeyboardEvent)} // This is insane but what I want
-                              onBlur={(e) => updateTarget(key, e, "min")}
-                              className="px-1 rounded bg-secondary"
-                            >
-                              {quotas.min}
-                            </span>
-                            <span> / {quotas.total.toFixed(2)} / </span>
-                            <span
-                              contentEditable
-                              suppressContentEditableWarning
-                              onBlur={(e) => updateTarget(key, e, "max")}
-                              className="px-1 rounded bg-secondary"
-                            >
-                              {quotas.max}
-                            </span>
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
                           </div>
+                        )}
+                      </Droppable>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Disabled Foods</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[100px]">
+                      <Droppable droppableId="disabled-foods">
+                        {(provided) => (
+                          <div
+                            {...provided.droppableProps}
+                            ref={provided.innerRef}
+                            className="space-y-2 h-full"
+                          >
+                            {disabledFoods.map((item, index) => (
+                              <Draggable
+                                key={item.draggable_id}
+                                draggableId={item.draggable_id}
+                                index={index}
+                              >
+                                {(provided) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    className={`bg-secondary p-2 rounded-md flex justify-between items-center ${
+                                      item.inMeal ? "opacity-50" : ""
+                                    }`}
+                                  >
+                                    <span>
+                                      {getIcon(item)}
+                                      {item.name} - Calories: {item.calories}
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => enableFood(item)}
+                                    >
+                                      <RotateCcw className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                          </div>
+                        )}
+                      </Droppable>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Nutrition Quota</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {Object.entries(ranges).map(([key, quotas]) => (
+                        <div key={key}>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium">{key}</span>
+                            <div className="text-sm">
+                              <span
+                                contentEditable
+                                suppressContentEditableWarning
+                                onKeyDown={(e) =>
+                                  restrictToNumbers(
+                                    e as unknown as KeyboardEvent
+                                  )
+                                } // This is insane but what I want
+                                onBlur={(e) => updateTarget(key, e, "min")}
+                                className="px-1 rounded bg-secondary"
+                              >
+                                {quotas.min}
+                              </span>
+                              <span> / {quotas.total.toFixed(2)} / </span>
+                              <span
+                                contentEditable
+                                suppressContentEditableWarning
+                                onBlur={(e) => updateTarget(key, e, "max")}
+                                className="px-1 rounded bg-secondary"
+                              >
+                                {quotas.max}
+                              </span>
+                            </div>
+                          </div>
+                          <Progress segments={getSegments(quotas)} />
                         </div>
-                        <Progress segments={getSegments(quotas)} />
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+            <div className="fixed bottom-4 right-4 flex space-x-2 z-50">
+              <Button onClick={saveToLocalStorage}>
+                <Copy className="h-4 w-4 mr-2" />
+                Save to Browser
+              </Button>
+              <Button onClick={copyForTodoist}>
+                <Copy className="h-4 w-4 mr-2" />
+                Copy for Todoist
+              </Button>
             </div>
           </div>
-          <div className="fixed bottom-4 right-4 flex space-x-2 z-50">
-            <Button onClick={saveToLocalStorage}>
-              <Copy className="h-4 w-4 mr-2" />
-              Save to Browser
-            </Button>
-            <Button onClick={copyForTodoist}>
-              <Copy className="h-4 w-4 mr-2" />
-              Copy for Todoist
-            </Button>
-          </div>
-        </div>
-      </Layout>
-    </DragDropContext>
+        </Layout>
+      </DragDropContext>
+    </TooltipProvider>
   );
 }
