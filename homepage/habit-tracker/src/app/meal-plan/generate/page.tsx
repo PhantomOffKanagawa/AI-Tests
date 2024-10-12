@@ -64,7 +64,12 @@ enum GenerateType {
   OnlyIncrease = "increase",
   OnlyDecrease = "decrease",
   KeepEqual = "equal",
-  AnyWithinBounds = "bounded-any"
+  AnyWithinBounds = "bounded-any",
+}
+
+enum MealReason {
+  Manual = "manual",
+  Generated = "generated",
 }
 
 interface Food {
@@ -86,7 +91,7 @@ interface Food {
   key: string; // Used for React key
   draggable_id: string; // Used for Draggable key
   inMeal: boolean; // Used to track if food dragged in meal
-  mealReason: string; // Used to track how food got to meal
+  mealReason: MealReason; // Used to track how food got to meal
   generateType: GenerateType; // Track what changes to make to food in generation, to be enum
 }
 
@@ -220,10 +225,10 @@ export default function MealPlanGenerator() {
       ? parseFloat(parseFloat(e.target.value).toFixed(2))
       : 0;
     newMeals[mealIndex].items[itemIndex].servings = newServings;
-    newMeals[mealIndex].items[itemIndex].mealReason = "manual";
+    newMeals[mealIndex].items[itemIndex].mealReason = MealReason.Manual;
 
     newFoods[food.name].servings = e.target.value;
-    newFoods[food.name].mealReason = "manual";
+    newFoods[food.name].mealReason = MealReason.Manual;
 
     setMeals(newMeals);
     setFoods(newFoods);
@@ -345,12 +350,12 @@ export default function MealPlanGenerator() {
     } else {
       // Dropped into a meal
       newFoods[foodItem.name].meal_display_group = newMeals[destMealIndex].name;
-      newFoods[foodItem.name].mealReason = "manual";
-      foodItem.mealReason = "manual";
+      newFoods[foodItem.name].mealReason = MealReason.Manual;
+      foodItem.mealReason = MealReason.Manual;
       if (sourceMealIndex == -1)
         // If source was not a meal
         newFoods[foodItem.name].servings = foodItem.min_serving;
-      // newFoods[foodItem.name].mealReason = "manual";
+      // newFoods[foodItem.name].mealReason = MealReason.Manual;
       if (sourceId === destId) {
         // If dragging within the same meal, rearrange the item
         const currentItems = newMeals[destMealIndex].items;
@@ -385,10 +390,10 @@ export default function MealPlanGenerator() {
     );
 
     newMeals[mealIndex].items[itemIndex].generateType = type;
-    newMeals[mealIndex].items[itemIndex].mealReason = "manual";
+    newMeals[mealIndex].items[itemIndex].mealReason = MealReason.Manual;
 
     newFoods[item.name].generateType = type;
-    newFoods[item.name].mealReason = "manual";
+    newFoods[item.name].mealReason = MealReason.Manual;
 
     setMeals(newMeals);
     setFoods(newFoods);
@@ -499,7 +504,7 @@ export default function MealPlanGenerator() {
       icon = <Heart className="h-4 w-4 inline me-2" />;
     }
 
-    if (food.inMeal && food.mealReason == "generated") {
+    if (food.inMeal && food.mealReason == MealReason.Generated) {
       icon = addElement(<Computer className="h-4 w-4 inline me-2" />, icon);
     }
 
@@ -507,7 +512,7 @@ export default function MealPlanGenerator() {
     //   icon = addElement(<Salad className="h-4 w-4 inline me-2" />, icon);
     // }
 
-    // if (food.mealReason == "manual") {
+    // if (food.mealReason == MealReason.Manual) {
     //   icon = addElement(<Hand className="h-4 w-4 inline me-2" />, icon);
     // }
 
@@ -722,7 +727,7 @@ export default function MealPlanGenerator() {
       const servings = solution[food] * foodData.serving_step;
       if (servings && servings !== 0) {
         const group =
-          foodData.mealReason == "manual"
+          foodData.mealReason == MealReason.Manual
             ? foodData.meal_display_group
             : foodData.display_group || "Ungrouped";
 
@@ -732,8 +737,8 @@ export default function MealPlanGenerator() {
 
         const mealReason =
           !("mealReason" in newFoods[food]) ||
-          newFoods[food].mealReason != "manual"
-            ? "generated"
+          newFoods[food].mealReason != MealReason.Manual
+            ? MealReason.Generated
             : newFoods[food].mealReason;
 
         foodsByGroup[group].push({
