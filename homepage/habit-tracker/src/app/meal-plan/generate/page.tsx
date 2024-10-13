@@ -1,5 +1,8 @@
 "use client";
 
+import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
+import "react-circular-progressbar/dist/styles.css";
+import { motion, AnimatePresence } from "framer-motion";
 import React, {
   useState,
   useEffect,
@@ -42,6 +45,7 @@ import {
   ChevronsUpDown,
   Pizza,
   Ruler,
+  Save,
 } from "lucide-react";
 import Layout from "@/components/Layout";
 import {
@@ -72,9 +76,9 @@ export default function MealPlanGenerator() {
   });
   const [meals, setMeals] = useState<GeneratorList[]>([
     { id: 1, name: "Breakfast", items: [] },
-    { id: 3, name: "Lunch", items: [] },
-    { id: 5, name: "Dinner", items: [] },
-    { id: 5, name: "Snacks", items: [] },
+    { id: 2, name: "Lunch", items: [] },
+    { id: 3, name: "Dinner", items: [] },
+    { id: 4, name: "Snacks", items: [] },
   ]);
   const [price, setPrice] = useState(0);
 
@@ -92,9 +96,9 @@ export default function MealPlanGenerator() {
   const [weekPlan, setWeekPlan] = useState<GeneratorList[][]>(
     Array(7).fill([
       { id: 1, name: "Breakfast", items: [] },
-      { id: 3, name: "Lunch", items: [] },
-      { id: 5, name: "Dinner", items: [] },
-      { id: 5, name: "Snacks", items: [] },
+      { id: 2, name: "Lunch", items: [] },
+      { id: 3, name: "Dinner", items: [] },
+      { id: 4, name: "Snacks", items: [] },
     ])
   );
   const [weekRanges, setWeekRanges] = useState<GoalRanges[]>(
@@ -105,6 +109,9 @@ export default function MealPlanGenerator() {
       Protein: { min: 190, max: 210, total: 0 },
     })
   );
+
+  //Side Buttons
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
 
   enum foodDisplayType {
     AllFood = "all-food",
@@ -141,7 +148,7 @@ export default function MealPlanGenerator() {
   }, []);
 
   useEffect(() => {
-    updateDayMeals()
+    updateDayMeals();
   }, [meals]);
 
   const updateDayMeals = () => {
@@ -151,7 +158,7 @@ export default function MealPlanGenerator() {
     const newWeekPlan = [...weekPlan];
     newWeekPlan[selectedDay] = newMeals;
     setWeekPlan(newWeekPlan);
-  }
+  };
 
   useEffect(() => {
     if (activeMealSearch !== null && searchInputRef.current) {
@@ -195,9 +202,9 @@ export default function MealPlanGenerator() {
   const clearMeals = () => {
     const newMeals = [
       { id: 1, name: "Breakfast", items: [] },
-      { id: 3, name: "Lunch", items: [] },
-      { id: 5, name: "Dinner", items: [] },
-      { id: 7, name: "Snacks", items: [] },
+      { id: 2, name: "Lunch", items: [] },
+      { id: 3, name: "Dinner", items: [] },
+      { id: 4, name: "Snacks", items: [] },
     ];
 
     const newFoods = { ...foods };
@@ -717,14 +724,7 @@ export default function MealPlanGenerator() {
       lowestProteinCostHeuristic
     );
 
-    const display_groups = [
-      "Morning snack",
-      "Breakfast",
-      "Afternoon snack",
-      "Lunch",
-      "Evening snack",
-      "Dinner",
-    ];
+    const display_groups = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 
     for (const [food, food_data] of Object.entries(selectedFoods)) {
       // if (!food_data.enabled && !food_data.inMeal) continue; // Handeled in Preprocess
@@ -904,7 +904,7 @@ export default function MealPlanGenerator() {
     console.log(foods);
     return {
       newFoods: newFoods,
-      newMeals: newMeals
+      newMeals: newMeals,
     };
   };
 
@@ -1040,7 +1040,16 @@ export default function MealPlanGenerator() {
 
   // Clear entire week plan
   const clearWeekPlan = () => {
-    setWeekPlan(Array(7).fill([]));
+    setWeekPlan(
+      Array(7).fill([
+        [
+          { id: 1, name: "Breakfast", items: [] },
+          { id: 2, name: "Lunch", items: [] },
+          { id: 3, name: "Dinner", items: [] },
+          { id: 4, name: "Snacks", items: [] },
+        ],
+      ])
+    );
     setWeekRanges(Array(7).fill(ranges));
   };
 
@@ -1069,7 +1078,12 @@ export default function MealPlanGenerator() {
 
             <Tabs defaultValue="day" className="mb-6">
               <TabsList>
-                <TabsTrigger onClick={() => setMeals(weekPlan[selectedDay])} value="day">Day View</TabsTrigger>
+                <TabsTrigger
+                  onClick={() => setMeals(weekPlan[selectedDay])}
+                  value="day"
+                >
+                  Day View
+                </TabsTrigger>
                 <TabsTrigger value="week">Week View</TabsTrigger>
               </TabsList>
               <TabsContent value="day">
@@ -1824,12 +1838,10 @@ export default function MealPlanGenerator() {
             </Tabs>
             <div className="fixed bottom-4 right-4 flex space-x-2 z-50">
               <Button onClick={saveToLocalStorage}>
-                <Copy className="h-4 w-4 mr-2" />
-                Save to Browser
+                <Save className="h-4 w-4" />
               </Button>
               <Button onClick={copyForTodoist}>
-                <Copy className="h-4 w-4 mr-2" />
-                Copy for Todoist
+                <Copy className="h-4 w-4" />
               </Button>
             </div>
           </div>
