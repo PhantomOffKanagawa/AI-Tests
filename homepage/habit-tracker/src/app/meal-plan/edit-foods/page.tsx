@@ -64,6 +64,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 
 interface SearchResult {
   food_name: string;
@@ -89,8 +96,8 @@ const initialBasicForm = {
   carbs: "",
   fat: "",
   protein: "",
-  min_servings: "",
-  max_servings: "",
+  min_serving: "",
+  max_serving: "",
   serving_step: "",
   units: "",
   unit_name: "",
@@ -102,7 +109,7 @@ const initialRecipeForm = {
   required: false,
   display_group: "",
   group: "",
-  ingredients: [{ item: {} as BasicFood, quantity: 1, usingFoodUnits: false }],
+  ingredients: [],
   instructions: [],
   cost: "",
   calories: "",
@@ -117,13 +124,13 @@ const initialRecipeForm = {
 };
 
 const initialMealForm = {
-  type: FoodType.Recipe,
+  type: FoodType.Meal,
   name: "",
   enabled: true,
   required: false,
   display_group: "",
   group: "",
-  components: [{ item: {} as BasicFood, quantity: 1, usingFoodUnits: false }],
+  components: [],
   cost: "",
   calories: "",
   carbs: "",
@@ -151,20 +158,24 @@ export default function FoodsEditor() {
   const videoRef = useRef<HTMLDivElement>(null); //useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [tab, setTab] = useState("basic");
+  const [searchTab, setSearchTab] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const NUTRITIONIX_APP_ID = process.env.NEXT_PUBLIC_NUTRITIONIX_APP_ID;
   const NUTRITIONIX_API_KEY = process.env.NEXT_PUBLIC_NUTRITIONIX_API_KEY;
 
-  const allFoods = Object.keys(foods).sort().reduce(
-    (obj, key) => { 
-      obj[key] = foods[key]; 
-      return obj;
-    }, 
-    {}
-  );;
+  const allFoods = Object.values(foods).sort((foodA, foodB) =>
+    foodA.name.localeCompare(foodB.name)
+  );
 
   const basicFoods = Object.values(foods)
-    .filter((food) => food.type == FoodType.Food)
+    .filter((food) => food.type == undefined || food.type == FoodType.Food)
+    .sort((foodA, foodB) => foodA.name.localeCompare(foodB.name));
+
+  const recipeSafe = Object.values(foods)
+    .filter(
+      (food) => food.type == FoodType.Food || food.type == FoodType.Recipe
+    )
     .sort((foodA, foodB) => foodA.name.localeCompare(foodB.name));
 
   const recipes = Object.values(foods)
@@ -182,7 +193,10 @@ export default function FoodsEditor() {
       for (let key in storedFoodsObj) {
         if (typeof storedFoodsObj[key].cost != "number")
           delete storedFoodsObj[key];
-        if (storedFoodsObj[key].type == undefined)
+        if (
+          storedFoodsObj[key].type == undefined ||
+          storedFoodsObj[key].type == "Food"
+        )
           storedFoodsObj[key].type = FoodType.Food;
 
         const draggableId = encodeURIComponent(key);
@@ -236,19 +250,23 @@ export default function FoodsEditor() {
     }
   };
 
-  const addIngredient = (foodType: FoodType) => {
+  const addIngredient = (food: FoodItem, foodType: FoodType) => {
     if (foodType == FoodType.Recipe) {
       const newForm = { ...recipeForm };
       newForm.ingredients = [
         ...newForm.ingredients,
-        { item: {} as BasicFood, quantity: 1, usingFoodUnits: false },
+        {
+          item: food as BasicFood | Recipe,
+          quantity: 1,
+          usingFoodUnits: false,
+        },
       ];
       setRecipeForm(newForm);
     } else if (foodType == FoodType.Meal) {
       const newForm = { ...mealForm };
       newForm.components = [
         ...newForm.components,
-        { item: {} as BasicFood, quantity: 1, usingFoodUnits: false },
+        { item: food, quantity: 1, usingFoodUnits: false },
       ];
       setMealForm(newForm);
     }
@@ -343,6 +361,12 @@ export default function FoodsEditor() {
       setFoods(newFoods);
       localStorage.setItem("foods", JSON.stringify(newFoods));
       setRecipeForm(initialRecipeForm);
+    } else if (type == FoodType.Meal) {
+      mealForm.key = encodeURIComponent(mealForm.name);
+      const newFoods = { ...foods, [mealForm.name]: mealForm };
+      setFoods(newFoods);
+      localStorage.setItem("foods", JSON.stringify(newFoods));
+      setMealForm(initialMealForm);
     }
   };
 
@@ -377,6 +401,19 @@ export default function FoodsEditor() {
     setFoods(newFoods);
     localStorage.setItem("foods", JSON.stringify(newFoods));
   };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setSearchTab(null);
+    }
+  };
+
+  useEffect(() => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [searchTab]);
 
   const downloadJSON = () => {
     const dataStr =
@@ -995,6 +1032,20 @@ export default function FoodsEditor() {
                         placeholder="Hamburger"
                         className="mt-1"
                       />
+                    </div>{" "}
+                    <div>
+                      <Label htmlFor="makes_servings">
+                        Makes How Many Servings
+                      </Label>
+                      <Input
+                        type="number"
+                        id="makes_servings"
+                        name="makes_servings"
+                        value={recipeForm.makes_servings}
+                        onChange={(e) => handleInputChange(e, setRecipeForm)}
+                        placeholder="0"
+                        required
+                      />
                     </div>
                   </div>
 
@@ -1002,7 +1053,7 @@ export default function FoodsEditor() {
                     <Label>Ingredients</Label>
                     {recipeForm.ingredients.map((ing, index) => (
                       <div
-                        key={`m-${index}-${ing.item.key}-${ing.quantity}-${ing.usingFoodUnits}`}
+                        key={`r-${index}-${ing.item.key}-${ing.quantity}-${ing.usingFoodUnits}`}
                         className="flex items-center space-x-2 mt-2"
                       >
                         <Button
@@ -1015,31 +1066,9 @@ export default function FoodsEditor() {
                         >
                           <Minus className="h-4 w-4" />
                         </Button>
-                        <Select
-                          onValueChange={(value) =>
-                            updateIngredient(
-                              index,
-                              "item",
-                              foods[value],
-                              FoodType.Recipe
-                            )
-                          }
-                          value={ing.item ? ing.item.name : ""}
-                        >
-                          <SelectTrigger className="grow w-1">
-                            <SelectValue placeholder="Select ingredient" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(allFoods).map(([id, food]) => (
-                              <SelectItem
-                                key={`m-${index}-${food.key}`}
-                                value={food.name}
-                              >
-                                {food.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="grow font-normal leading-relaxed ">
+                          {ing.item ? ing.item.name : ""}
+                        </div>
                         <Input
                           type="number"
                           value={ing.quantity ? ing.quantity : ""}
@@ -1081,7 +1110,9 @@ export default function FoodsEditor() {
                               );
                             }}
                             className={
-                              !ing.usingFoodUnits ? "bg-neutral-200" : ""
+                              !ing.usingFoodUnits
+                                ? "bg-neutral-200 dark:bg-neutral-800"
+                                : ""
                             }
                           >
                             Servings
@@ -1111,7 +1142,9 @@ export default function FoodsEditor() {
                                   );
                                 }}
                                 className={
-                                  ing.usingFoodUnits ? "bg-neutral-200" : ""
+                                  ing.usingFoodUnits
+                                    ? "bg-neutral-200 dark:bg-neutral-800"
+                                    : ""
                                 }
                               >
                                 {ing.item.unit_name}
@@ -1125,11 +1158,46 @@ export default function FoodsEditor() {
                     ))}
                     <Button
                       type="button"
-                      onClick={() => addIngredient(FoodType.Recipe)}
-                      className="mt-2 block"
+                      variant="default"
+                      onClick={() =>
+                        setSearchTab(searchTab == "recipe" ? null : "recipe")
+                      }
+                      className="flex items-center mt-3 w-full"
                     >
-                      <Plus className="h-4 w-4 mr-2 inline" /> Add Ingredient
-                    </Button>
+                      {searchTab === "recipe" ? (
+                        <X className="h-4 w-4 mr-1" />
+                      ) : (
+                        <Plus className="h-4 w-4 mr-1" />
+                      )}
+                      {searchTab === "recipe" ? "Close" : "Add Ingredient"}
+                    </Button>{" "}
+                    {searchTab === "recipe" && (
+                      // Add "absolute if want overlay food items"
+                      <div className="w-full z-20">
+                        <Command
+                          onKeyDown={handleSearchKeyDown}
+                          className="border"
+                        >
+                          <CommandInput
+                            placeholder="Search..."
+                            ref={searchInputRef}
+                          />
+                          <CommandList>
+                            <CommandEmpty>No results found.</CommandEmpty>
+                            {recipeSafe.map((food, index) => (
+                              <CommandItem
+                                key={food.name}
+                                onSelect={() =>
+                                  addIngredient(food, FoodType.Recipe)
+                                }
+                              >
+                                {food.name}
+                              </CommandItem>
+                            ))}
+                          </CommandList>
+                        </Command>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -1140,7 +1208,12 @@ export default function FoodsEditor() {
                       onChange={(e) => setInstruction(e.target.value)}
                       className="mb-2"
                     />
-                    <Button type="button" onClick={addInstruction}>
+                    <Button
+                      type="button"
+                      variant="default"
+                      onClick={addInstruction}
+                      className="flex items-center mt-3 w-full"
+                    >
                       <Plus className="h-4 w-4 mr-2" /> Add Instruction
                     </Button>
                     {recipeForm == undefined ? (
@@ -1165,21 +1238,6 @@ export default function FoodsEditor() {
                         </div>
                       ))
                     )}
-                  </div>
-
-                  <div>
-                    <Label htmlFor="makes_servings">
-                      Makes How Many Servings
-                    </Label>
-                    <Input
-                      type="number"
-                      id="makes_servings"
-                      name="makes_servings"
-                      value={recipeForm.makes_servings}
-                      onChange={(e) => handleInputChange(e, setRecipeForm)}
-                      placeholder="0"
-                      required
-                    />
                   </div>
 
                   <Separator className="my-4" />
@@ -1421,7 +1479,7 @@ export default function FoodsEditor() {
                     <Label>Components</Label>
                     {mealForm.components.map((ing, index) => (
                       <div
-                        key={index}
+                        key={`m-${index}-${ing.item.key}-${ing.quantity}-${ing.usingFoodUnits}`}
                         className="flex items-center space-x-2 mt-2"
                       >
                         <Button
@@ -1432,7 +1490,11 @@ export default function FoodsEditor() {
                         >
                           <Minus className="h-4 w-4" />
                         </Button>
-                        <Select
+                        <div className="grow font-normal leading-relaxed ">
+                          {ing.item ? ing.item.name : ""}
+                        </div>
+
+                        {/* <Select
                           onValueChange={(value) =>
                             updateIngredient(
                               index,
@@ -1456,7 +1518,7 @@ export default function FoodsEditor() {
                               </SelectItem>
                             ))}
                           </SelectContent>
-                        </Select>
+                        </Select> */}
                         <Input
                           type="number"
                           value={ing.quantity ? ing.quantity : ""}
@@ -1498,7 +1560,9 @@ export default function FoodsEditor() {
                               );
                             }}
                             className={
-                              !ing.usingFoodUnits ? "bg-neutral-200" : ""
+                              !ing.usingFoodUnits
+                                ? "bg-neutral-200 dark:bg-neutral-800"
+                                : ""
                             }
                           >
                             Servings
@@ -1528,7 +1592,9 @@ export default function FoodsEditor() {
                                   );
                                 }}
                                 className={
-                                  ing.usingFoodUnits ? "bg-neutral-200" : ""
+                                  ing.usingFoodUnits
+                                    ? "bg-neutral-200 dark:bg-neutral-800"
+                                    : ""
                                 }
                               >
                                 {ing.item.unit_name}
@@ -1542,11 +1608,46 @@ export default function FoodsEditor() {
                     ))}
                     <Button
                       type="button"
-                      onClick={() => addIngredient(FoodType.Meal)}
-                      className="mt-2 block"
+                      variant="default"
+                      onClick={() =>
+                        setSearchTab(searchTab == "meal" ? null : "meal")
+                      }
+                      className="flex items-center mt-3 w-full"
                     >
-                      <Plus className="h-4 w-4 mr-2 inline" /> Add Component
-                    </Button>
+                      {searchTab === "meal" ? (
+                        <X className="h-4 w-4 mr-1" />
+                      ) : (
+                        <Plus className="h-4 w-4 mr-1" />
+                      )}
+                      {searchTab === "meal" ? "Close" : "Add Ingredient"}
+                    </Button>{" "}
+                    {searchTab === "meal" && (
+                      // Add "absolute if want overlay food items"
+                      <div className="w-full z-20">
+                        <Command
+                          onKeyDown={handleSearchKeyDown}
+                          className="border"
+                        >
+                          <CommandInput
+                            placeholder="Search..."
+                            ref={searchInputRef}
+                          />
+                          <CommandList>
+                            <CommandEmpty>No results found.</CommandEmpty>
+                            {allFoods.map((food, index) => (
+                              <CommandItem
+                                key={food.name}
+                                onSelect={() =>
+                                  addIngredient(food, FoodType.Meal)
+                                }
+                              >
+                                {food.name}
+                              </CommandItem>
+                            ))}
+                          </CommandList>
+                        </Command>
+                      </div>
+                    )}
                   </div>
 
                   {/* <div>
@@ -1795,7 +1896,7 @@ export default function FoodsEditor() {
                       <TableCell>
                         {food.name}
                         {food.unit_name && food.units
-                          ? ` ${food.units} ${food.unit_name}`
+                          ? ` - ${food.units} ${food.unit_name}`
                           : ""}
                       </TableCell>
                       <TableCell>${food.cost.toFixed(2)}</TableCell>
@@ -1853,7 +1954,7 @@ export default function FoodsEditor() {
                       <TableCell>
                         {food.name}
                         {food.unit_name && food.units
-                          ? ` ${food.units} ${food.unit_name}`
+                          ? ` - ${food.units} ${food.unit_name}`
                           : ""}
                       </TableCell>
                       <TableCell>${food.cost.toFixed(2)}</TableCell>
@@ -1911,7 +2012,7 @@ export default function FoodsEditor() {
                       <TableCell>
                         {food.name}
                         {food.unit_name && food.units
-                          ? ` ${food.units} ${food.unit_name}`
+                          ? ` - ${food.units} ${food.unit_name}`
                           : ""}
                       </TableCell>
                       <TableCell>${food.cost.toFixed(2)}</TableCell>

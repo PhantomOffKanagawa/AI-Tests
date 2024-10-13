@@ -13,7 +13,7 @@ export enum MealReason {
 }
 
 export enum FoodType {
-  Ingredient = "ingredient",
+  Ingredient = "Ingredient",
   Food = "Basic Food",
   Recipe = "Recipe",
   Meal = "Meal",

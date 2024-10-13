@@ -383,7 +383,7 @@ export default function MealPlanGenerator() {
         // newFoods[foodItem.name].inMeal = true;
       } else {
         // If dragging to a different meal
-        const newFood = { ...foodItem, servings: 1, inMeal: true };
+        const newFood = { ...foodItem, inMeal: true };
         newMeals[destMealIndex].items.splice(destination.index, 0, newFood);
         newFoods[foodItem.name].inMeal = true;
       }
@@ -930,7 +930,7 @@ export default function MealPlanGenerator() {
   return (
     <TooltipProvider>
       <DragDropContext onDragEnd={onDragEnd}>
-        <script src="/js/solver.js"></script>
+        <script async src="/js/solver.js"></script>
         <Layout>
           <div className="container mx-auto px-4 py-8 max-h-screen">
             <h1 className="text-3xl font-bold mb-6">
@@ -939,7 +939,7 @@ export default function MealPlanGenerator() {
             <div className="flex flex-col lg:flex-row gap-8">
               <div className="w-full lg:w-2/3 h-full">
                 <Card>
-                  <CardHeader className="bg-primary text-primary-foreground mb-4 rounded">
+                  <CardHeader className="bg-primary dark:bg-neutral-300 text-primary-foreground mb-4 rounded">
                     <CardTitle className="text-2xl flex items-center justify-between">
                       <span>Meals</span>
                       <span className="text-xl font-normal">
@@ -952,7 +952,7 @@ export default function MealPlanGenerator() {
                       {meals.map((meal) => (
                         <div key={meal.id} className="mb-6">
                           <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-semibold mb-4 text-gray-700 flex items-center">
+                            <h3 className="text-xl font-semibold mb-4 text-neutral-700 dark:text-neutral-200   flex items-center">
                               <Utensils className="mr-2 h-5 w-5" />
                               {meal.name}
                             </h3>
@@ -1045,7 +1045,7 @@ export default function MealPlanGenerator() {
                                                           true
                                                         )
                                                       }
-                                                      className="text-sm text-muted-foreground"
+                                                      className="text-xs text-muted-foreground"
                                                     >
                                                       {item.max_serving.toFixed(
                                                         1
@@ -1067,7 +1067,7 @@ export default function MealPlanGenerator() {
                                                           false
                                                         )
                                                       }
-                                                      className="text-sm text-muted-foreground"
+                                                      className="text-xs text-muted-foreground"
                                                     >
                                                       {item.min_serving.toFixed(
                                                         1
@@ -1112,7 +1112,7 @@ export default function MealPlanGenerator() {
                                                       item
                                                     )
                                                   }
-                                                  className="w-20"
+                                                  className="w-20 dark:bg-neutral-900"
                                                 />
                                               </TooltipTrigger>
                                               <TooltipContent>
@@ -1141,6 +1141,7 @@ export default function MealPlanGenerator() {
                                                 <Button
                                                   size="icon"
                                                   variant="outline"
+                                                  className="dark:bg-neutral-900"
                                                   onClick={() =>
                                                     removeFromMeal(item, meal)
                                                   }
@@ -1168,12 +1169,7 @@ export default function MealPlanGenerator() {
                                                 <Button
                                                   size="icon"
                                                   variant="outline"
-                                                  className={
-                                                    item.generateType ==
-                                                    "increase"
-                                                      ? "bg-neutral-200"
-                                                      : ""
-                                                  }
+                                                  className="dark:bg-neutral-900"
                                                   onClick={() =>
                                                     setUsingFoodUnits(
                                                       item,
@@ -1209,8 +1205,8 @@ export default function MealPlanGenerator() {
                                                   className={
                                                     item.generateType ==
                                                     "increase"
-                                                      ? "bg-neutral-200"
-                                                      : ""
+                                                      ? "bg-neutral-200 dark:bg-neutral-950"
+                                                      : "dark:bg-neutral-900"
                                                   }
                                                   onClick={() =>
                                                     setGenerateType(
@@ -1239,8 +1235,8 @@ export default function MealPlanGenerator() {
                                                   className={
                                                     item.generateType ==
                                                     "decrease"
-                                                      ? "bg-neutral-200"
-                                                      : ""
+                                                      ? "bg-neutral-200 dark:bg-neutral-950"
+                                                      : "dark:bg-neutral-900"
                                                   }
                                                   onClick={() =>
                                                     setGenerateType(
@@ -1268,8 +1264,8 @@ export default function MealPlanGenerator() {
                                                   disabled={item.usingFoodUnits}
                                                   className={
                                                     item.generateType == "equal"
-                                                      ? "bg-neutral-200"
-                                                      : ""
+                                                      ? "bg-neutral-200 dark:bg-neutral-950"
+                                                      : "dark:bg-neutral-900"
                                                   }
                                                   onClick={() =>
                                                     setGenerateType(
@@ -1298,8 +1294,8 @@ export default function MealPlanGenerator() {
                                                   className={
                                                     item.generateType ==
                                                     "bounded-any"
-                                                      ? "bg-neutral-200"
-                                                      : ""
+                                                      ? "bg-neutral-200 dark:bg-neutral-950"
+                                                      : "dark:bg-neutral-900"
                                                   }
                                                   onClick={() =>
                                                     setGenerateType(
