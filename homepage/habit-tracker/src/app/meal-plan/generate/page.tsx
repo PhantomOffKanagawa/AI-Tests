@@ -59,6 +59,7 @@ import {
   GoalOptions,
   GoalRanges,
 } from "@/lib/food-definitions";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function MealPlanGenerator() {
   const [foods, setFoods] = useState<{ [key: string]: FoodItem }>({});
@@ -81,8 +82,23 @@ export default function MealPlanGenerator() {
   const [allFoodsSearchTerm, setAllFoodsSearchTerm] = useState("");
   const [showAllFoodsSearch, setShowAllFoodsSearch] = useState(false);
 
+  // Track Command Selects
   const searchInputRef = useRef<HTMLInputElement>(null);
   const allFoodsSearchInputRef = useRef<HTMLInputElement>(null);
+
+  // Keep State For Multiple Days
+  const [selectedDay, setSelectedDay] = useState<number>(0);
+  const [weekPlan, setWeekPlan] = useState<GeneratorList[][]>(
+    Array(7).fill([])
+  );
+  const [weekRanges, setWeekRanges] = useState<GoalRanges[]>(
+    Array(7).fill({
+      Calories: { min: 1700, max: 1800, total: 0 },
+      Fat: { min: 30, max: 55, total: 0 },
+      Carbs: { min: 120, max: 200, total: 0 },
+      Protein: { min: 190, max: 210, total: 0 },
+    })
+  );
 
   enum foodDisplayType {
     AllFood = "all-food",
@@ -119,8 +135,20 @@ export default function MealPlanGenerator() {
   }, []);
 
   useEffect(() => {
+    const newWeekPlan = [...weekPlan];
+    newWeekPlan[selectedDay] = meals;
+    setWeekPlan(newWeekPlan);
     updateRanges();
+    const newRanges = { ...ranges };
+    updateDayRanges(selectedDay, newRanges);
   }, [meals]);
+
+  useEffect(() => {
+    const newMeals = [...weekPlan[selectedDay]];
+    setMeals(newMeals);
+    const newRanges = { ...weekRanges[selectedDay] };
+    setRanges(newRanges);
+  }, [selectedDay]);
 
   useEffect(() => {
     if (activeMealSearch !== null && searchInputRef.current) {
@@ -183,7 +211,9 @@ export default function MealPlanGenerator() {
       (i) => i.name === food.name
     );
     if (e.target.value) {
-      newMeals[mealIndex].items[itemIndex].servings = parseFloat(parseFloat(e.target.value).toFixed(2));
+      newMeals[mealIndex].items[itemIndex].servings = parseFloat(
+        parseFloat(e.target.value).toFixed(2)
+      );
     } else {
       delete newMeals[mealIndex].items[itemIndex].servings;
     }
@@ -239,17 +269,16 @@ export default function MealPlanGenerator() {
     meals.forEach((meal) => {
       meal.items.forEach((item) => {
         if (item.servings) {
+          const quantity =
+            item.usingFoodUnits && item.units && item.unit_name
+              ? item.servings / item.units
+              : item.servings;
 
-        const quantity =
-          item.usingFoodUnits && item.units && item.unit_name
-            ? item.servings / item.units
-            : item.servings;
-
-        totalCalories += item.calories * quantity;
-        totalProtein += item.protein * quantity;
-        totalCarbs += item.carbs * quantity;
-        totalFat += item.fat * quantity;
-        totalPrice += item.cost * quantity;
+          totalCalories += item.calories * quantity;
+          totalProtein += item.protein * quantity;
+          totalCarbs += item.carbs * quantity;
+          totalFat += item.fat * quantity;
+          totalPrice += item.cost * quantity;
         }
       });
     });
@@ -400,11 +429,7 @@ export default function MealPlanGenerator() {
   };
 
   const setUsingFoodUnits = (item: FoodItem, meal: GeneratorList) => {
-    setGenerateType(
-      item,
-      meal,
-      GenerateType.KeepEqual
-    );
+    setGenerateType(item, meal, GenerateType.KeepEqual);
 
     const newMeals = [...meals];
     const newFoods = { ...foods };
@@ -414,8 +439,12 @@ export default function MealPlanGenerator() {
       (i) => i.name === item.name
     );
 
-    const servings = (newFoods[item.name].servings) ? newFoods[item.name].servings : 0;
-    const convertedServings = (!newFoods[item.name].usingFoodUnits) ? (newFoods[item.name].units as number) * (servings as number) : (servings as number) / (newFoods[item.name].units as number);
+    const servings = newFoods[item.name].servings
+      ? newFoods[item.name].servings
+      : 0;
+    const convertedServings = !newFoods[item.name].usingFoodUnits
+      ? (newFoods[item.name].units as number) * (servings as number)
+      : (servings as number) / (newFoods[item.name].units as number);
     const usingFoodUnits = newFoods[item.name].usingFoodUnits ? false : true;
 
     newMeals[mealIndex].items[itemIndex].servings = convertedServings;
@@ -707,9 +736,9 @@ export default function MealPlanGenerator() {
           case GenerateType.KeepEqual: {
             if (!food_data.servings) break;
             const quantity =
-            food_data.usingFoodUnits && food_data.units && food_data.unit_name
-              ? food_data.servings / food_data.units
-              : food_data.servings;
+              food_data.usingFoodUnits && food_data.units && food_data.unit_name
+                ? food_data.servings / food_data.units
+                : food_data.servings;
 
             problem.constraints[food] = {
               equal: quantity,
@@ -774,12 +803,7 @@ export default function MealPlanGenerator() {
       return;
     }
 
-    const predefinedGroupOrder = [
-      "Breakfast",
-      "Lunch",
-      "Dinner",
-      "Snack",
-    ];
+    const predefinedGroupOrder = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
     const foodsByGroup: { [key: string]: FoodItem[] } = {};
 
@@ -862,6 +886,8 @@ export default function MealPlanGenerator() {
 
   const startSolve = () => {
     solveMealPlan(foods);
+    updateDayPlan(selectedDay, meals);
+    updateDayRanges(selectedDay, ranges);
   };
 
   const saveToLocalStorage = () => {
@@ -926,6 +952,47 @@ export default function MealPlanGenerator() {
     food.name.toLowerCase().includes(allFoodsSearchTerm.toLowerCase())
   );
 
+  // Generate entire week plan
+  const generateWeekPlan = () => {
+    const newWeekPlan = weekPlan.map((dayMeals, index) => {
+      setSelectedDay(index);
+      solveMealPlan(foods);
+      return [...meals];
+    });
+    setWeekPlan(newWeekPlan);
+  };
+
+  // Clear entire week plan
+  const clearWeekPlan = () => {
+    setWeekPlan(Array(7).fill([]));
+    setWeekRanges(
+      Array(7).fill({
+        Calories: { min: 1700, max: 1800, total: 0 },
+        Fat: { min: 30, max: 55, total: 0 },
+        Carbs: { min: 120, max: 200, total: 0 },
+        Protein: { min: 190, max: 210, total: 0 },
+      })
+    );
+  };
+
+  // Generate entire week plan
+  const updateDayPlan = (dayIndex: number, newMeals: GeneratorList[]) => {
+    const newWeekPlan = [...weekPlan];
+    newWeekPlan[dayIndex] = newMeals;
+    setWeekPlan(newWeekPlan);
+  };
+
+  const updateDayRanges = (dayIndex: number, newRanges: GoalRanges) => {
+    console.log(dayIndex);
+    console.log(newRanges);
+    console.log(weekRanges);
+    const newWeekRanges = [...weekRanges];
+    const copyNewRanges = { ...newRanges };
+    newWeekRanges[dayIndex] = copyNewRanges;
+    setWeekRanges(newWeekRanges);
+    console.log(weekRanges);
+  };
+
   return (
     <TooltipProvider>
       <DragDropContext onDragEnd={onDragEnd}>
@@ -933,647 +1000,817 @@ export default function MealPlanGenerator() {
         <Layout>
           <div className="container mx-auto px-4 py-8 max-h-screen">
             <h1 className="text-3xl font-bold mb-6">
-              Enhanced Enhanced Meal Planner
+              Enhanced Weekly Meal Planner
             </h1>
-            <div className="flex flex-col lg:flex-row gap-8">
-              <div className="w-full lg:w-2/3 h-full">
-                <Card>
-                  <CardHeader className="bg-primary dark:bg-neutral-300 text-primary-foreground mb-4 rounded">
-                    <CardTitle className="text-2xl flex items-center justify-between">
-                      <span>Meals</span>
-                      <span className="text-xl font-normal">
-                        Total: ${price.toFixed(2)}
-                      </span>
-                    </CardTitle>
+
+            <Tabs defaultValue="day" className="mb-6">
+              <TabsList>
+                <TabsTrigger value="day">Day View</TabsTrigger>
+                <TabsTrigger value="week">Week View</TabsTrigger>
+              </TabsList>
+              <TabsContent value="day">
+                <Card className="mb-6">
+                  <CardHeader>
+                    <CardTitle>Week Calendar</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ScrollArea className="h-[600px] h-full pr-4">
-                      {meals.map((meal) => (
-                        <div key={meal.id} className="mb-6">
-                          <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-semibold mb-4 text-neutral-700 dark:text-neutral-200   flex items-center">
-                              <Utensils className="mr-2 h-5 w-5" />
-                              {meal.name}
-                            </h3>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleSearch(meal.id)}
-                              className="flex items-center"
-                            >
-                              {activeMealSearch === meal.id ? (
-                                <X className="h-4 w-4 mr-1" />
-                              ) : (
-                                <Plus className="h-4 w-4 mr-1" />
-                              )}
-                              {activeMealSearch === meal.id ? "Close" : "Add"}
-                            </Button>
-                          </div>
-                          <Droppable droppableId={meal.id.toString()}>
-                            {(provided) => (
-                              <div
-                                {...provided.droppableProps}
-                                ref={provided.innerRef}
-                                className="min-h-20 bg-secondary rounded-md relative"
-                              >
-                                {activeMealSearch === meal.id && (
-                                  // Add "absolute if want overlay food items"
-                                  <div className="w-full z-20">
-                                    <Command
-                                      onKeyDown={handleSearchKeyDown}
-                                      className="border"
-                                    >
-                                      <CommandInput
-                                        placeholder="Search..."
-                                        ref={searchInputRef}
-                                      />
-                                      <CommandList>
-                                        <CommandEmpty>
-                                          No results found.
-                                        </CommandEmpty>
-                                        {filteredFoods.map((food, index) => (
-                                          <CommandItem
-                                            key={food.name}
-                                            onSelect={() =>
-                                              addFoodToMeal(food, meal.id)
-                                            }
-                                          >
-                                            {food.name}
-                                          </CommandItem>
-                                        ))}
-                                      </CommandList>
-                                    </Command>
-                                  </div>
-                                )}
-                                {meal.items.map((item, index) => (
-                                  <Draggable
-                                    key={item.draggable_id}
-                                    draggableId={item.draggable_id + "_meal"}
-                                    index={index}
+                    <div className="flex justify-between">
+                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
+                        (day, index) => (
+                          <Button
+                            key={day}
+                            variant={
+                              selectedDay === index ? "default" : "outline"
+                            }
+                            onClick={() => setSelectedDay(index)}
+                          >
+                            {day}
+                          </Button>
+                        )
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+                <div className="flex flex-col lg:flex-row gap-8">
+                  <div className="w-full lg:w-2/3 h-full">
+                    <Card>
+                      <CardHeader className="bg-primary dark:bg-neutral-300 text-primary-foreground mb-4 rounded">
+                        <CardTitle className="text-2xl flex items-center justify-between">
+                          <span>Meals</span>
+                          <span className="text-xl font-normal">
+                            Total: ${price.toFixed(2)}
+                          </span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ScrollArea className="h-[600px] h-full pr-4">
+                          {meals.map((meal) => (
+                            <div key={meal.id} className="mb-6">
+                              <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-xl font-semibold mb-4 text-neutral-700 dark:text-neutral-200   flex items-center">
+                                  <Utensils className="mr-2 h-5 w-5" />
+                                  {meal.name}
+                                </h3>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleSearch(meal.id)}
+                                  className="flex items-center"
+                                >
+                                  {activeMealSearch === meal.id ? (
+                                    <X className="h-4 w-4 mr-1" />
+                                  ) : (
+                                    <Plus className="h-4 w-4 mr-1" />
+                                  )}
+                                  {activeMealSearch === meal.id
+                                    ? "Close"
+                                    : "Add"}
+                                </Button>
+                              </div>
+                              <Droppable droppableId={meal.id.toString()}>
+                                {(provided) => (
+                                  <div
+                                    {...provided.droppableProps}
+                                    ref={provided.innerRef}
+                                    className="min-h-20 bg-secondary rounded-md relative"
                                   >
-                                    {(provided) => (
-                                      <div
-                                        ref={provided.innerRef}
-                                        {...provided.draggableProps}
-                                        {...provided.dragHandleProps}
-                                        className="bg-secondary p-3 rounded-md"
-                                      >
-                                        <div className="flex justify-between items-center">
-                                          <span className="font-medium">
-                                            {getIcon(item)}
-                                            {item.name}
-                                          </span>
-                                          <div className="flex items-center space-x-2">
-                                            {!item.usingFoodUnits ? (
-                                              <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                  <div>
-                                                    <div
-                                                      contentEditable
-                                                      suppressContentEditableWarning
-                                                      onKeyDown={(e) =>
-                                                        restrictToNumbers(
-                                                          e as unknown as KeyboardEvent
-                                                        )
-                                                      } // This is insane but what I want
-                                                      onBlur={(e) =>
-                                                        updateMinMaxServings(
-                                                          e,
-                                                          meal,
-                                                          item,
-                                                          true
-                                                        )
-                                                      }
-                                                      className="text-xs text-muted-foreground"
-                                                    >
-                                                      {item.max_serving.toFixed(
-                                                        1
-                                                      )}
-                                                    </div>
-                                                    <div
-                                                      contentEditable
-                                                      suppressContentEditableWarning
-                                                      onKeyDown={(e) =>
-                                                        restrictToNumbers(
-                                                          e as unknown as KeyboardEvent
-                                                        )
-                                                      } // This is insane but what I want
-                                                      onBlur={(e) =>
-                                                        updateMinMaxServings(
-                                                          e,
-                                                          meal,
-                                                          item,
-                                                          false
-                                                        )
-                                                      }
-                                                      className="text-xs text-muted-foreground"
-                                                    >
-                                                      {item.min_serving.toFixed(
-                                                        1
-                                                      )}
-                                                    </div>
-                                                  </div>
-                                                </TooltipTrigger>
-                                                <TooltipContent>
-                                                  <p>Max / Min Serving</p>
-                                                </TooltipContent>
-                                              </Tooltip>
-                                            ) : (
-                                              <></>
-                                              // <Tooltip>
-                                              //   <TooltipTrigger asChild>
-                                              //     <div className="text-muted-foreground">
-                                              //       {item.units +
-                                              //         " " +
-                                              //         item.unit_name}
-                                              //     </div>
-                                              //   </TooltipTrigger>
-                                              //   <TooltipContent>
-                                              //     <p>Units in 1 Serving</p>
-                                              //   </TooltipContent>
-                                              // </Tooltip>
+                                    {activeMealSearch === meal.id && (
+                                      // Add "absolute if want overlay food items"
+                                      <div className="w-full z-20">
+                                        <Command
+                                          onKeyDown={handleSearchKeyDown}
+                                          className="border"
+                                        >
+                                          <CommandInput
+                                            placeholder="Search..."
+                                            ref={searchInputRef}
+                                          />
+                                          <CommandList>
+                                            <CommandEmpty>
+                                              No results found.
+                                            </CommandEmpty>
+                                            {filteredFoods.map(
+                                              (food, index) => (
+                                                <CommandItem
+                                                  key={food.name}
+                                                  onSelect={() =>
+                                                    addFoodToMeal(food, meal.id)
+                                                  }
+                                                >
+                                                  {food.name}
+                                                </CommandItem>
+                                              )
                                             )}
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Input
-                                                  type="number"
-                                                  value={item.servings ?? ""}
-                                                  // # Limit by min/max or no?
-                                                  // min={item.min_serving}
-                                                  // max={item.max_serving}
-                                                  min={0}
-                                                  max={9999}
-                                                  step={item.serving_step}
-                                                  onChange={(e) =>
-                                                    updateServings(
-                                                      e,
-                                                      meal,
-                                                      item
-                                                    )
-                                                  }
-                                                  className="w-20 dark:bg-neutral-900"
-                                                />
-                                              </TooltipTrigger>
-                                              <TooltipContent>
-                                                <p>Servings</p>
-                                              </TooltipContent>
-                                            </Tooltip>
-                                            {item.usingFoodUnits ? (
-                                              <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                  <div className="text-muted-foreground">
-                                                    {"/ " +
-                                                      item.units +
-                                                      " " +
-                                                      item.unit_name}
-                                                  </div>
-                                                </TooltipTrigger>
-                                                <TooltipContent>
-                                                  <p>Units in 1 Serving</p>
-                                                </TooltipContent>
-                                              </Tooltip>
-                                            ) : (
-                                              <></>
-                                            )}
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  size="icon"
-                                                  variant="outline"
-                                                  className="dark:bg-neutral-900"
-                                                  onClick={() =>
-                                                    removeFromMeal(item, meal)
-                                                  }
-                                                >
-                                                  <X className="h-4 w-4" />
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent>
-                                                <p>Remove From Meal</p>
-                                              </TooltipContent>
-                                            </Tooltip>
-                                          </div>
-                                        </div>
-                                        <div className="flex justify-between space-x-2">
-                                          <div className="text-sm text-muted-foreground mt-1 inline">
-                                            Calories: {item.calories}, Carbs:{" "}
-                                            {item.carbs}g, Protein:{" "}
-                                            {item.protein}
-                                            g, Fat: {item.fat}g
-                                          </div>
-                                          <div className="flex items-center space-x-2">
-                                          {item.units && item.unit_name ? (
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  size="icon"
-                                                  variant="outline"
-                                                  className="dark:bg-neutral-900"
-                                                  onClick={() =>
-                                                    setUsingFoodUnits(
-                                                      item,
-                                                      meal
-                                                    )
-                                                  }
-                                                >
-                                                  {!item.usingFoodUnits ? (
-                                                    <Pizza className="h-4 w-4" />
-                                                  ) : (
-                                                    <Ruler className="h-4 w-4" />
-                                                  )}
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent>
-                                                <p>
-                                                  Pizza: Generate based on
-                                                  number of servings
-                                                </p>
-                                                <p>
-                                                  Ruler: Generate based on
-                                                  number of units (e.g. grams)
-                                                </p>
-                                              </TooltipContent>
-                                            </Tooltip>
-                                          ) : (<></>)}
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  size="icon"
-                                                  variant="outline"
-                                                  disabled={item.usingFoodUnits}
-                                                  className={
-                                                    item.generateType ==
-                                                    "increase"
-                                                      ? "bg-neutral-200 dark:bg-neutral-950"
-                                                      : "dark:bg-neutral-900"
-                                                  }
-                                                  onClick={() =>
-                                                    setGenerateType(
-                                                      item,
-                                                      meal,
-                                                      GenerateType.OnlyIncrease
-                                                    )
-                                                  }
-                                                >
-                                                  <ChevronUp className="h-4 w-4" />
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent>
-                                                <p>
-                                                  Only Allow Generator to
-                                                  Increase to Max Servings
-                                                </p>
-                                              </TooltipContent>
-                                            </Tooltip>
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  size="icon"
-                                                  variant="outline"
-                                                  disabled={item.usingFoodUnits}
-                                                  className={
-                                                    item.generateType ==
-                                                    "decrease"
-                                                      ? "bg-neutral-200 dark:bg-neutral-950"
-                                                      : "dark:bg-neutral-900"
-                                                  }
-                                                  onClick={() =>
-                                                    setGenerateType(
-                                                      item,
-                                                      meal,
-                                                      GenerateType.OnlyDecrease
-                                                    )
-                                                  }
-                                                >
-                                                  <ChevronDown className="h-4 w-4" />
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent>
-                                                <p>
-                                                  Only Allow Generator to
-                                                  Decrease to Min Servings
-                                                </p>
-                                              </TooltipContent>
-                                            </Tooltip>
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  size="icon"
-                                                  variant="outline"
-                                                  disabled={item.usingFoodUnits}
-                                                  className={
-                                                    item.generateType == "equal"
-                                                      ? "bg-neutral-200 dark:bg-neutral-950"
-                                                      : "dark:bg-neutral-900"
-                                                  }
-                                                  onClick={() =>
-                                                    setGenerateType(
-                                                      item,
-                                                      meal,
-                                                      GenerateType.KeepEqual
-                                                    )
-                                                  }
-                                                >
-                                                  <Equal className="h-4 w-4" />
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent>
-                                                <p>
-                                                  Only Allow Generator to Keep
-                                                  Serving Count
-                                                </p>
-                                              </TooltipContent>
-                                            </Tooltip>
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  size="icon"
-                                                  variant="outline"
-                                                  disabled={item.usingFoodUnits}
-                                                  className={
-                                                    item.generateType ==
-                                                    "bounded-any"
-                                                      ? "bg-neutral-200 dark:bg-neutral-950"
-                                                      : "dark:bg-neutral-900"
-                                                  }
-                                                  onClick={() =>
-                                                    setGenerateType(
-                                                      item,
-                                                      meal,
-                                                      GenerateType.AnyWithinBounds
-                                                    )
-                                                  }
-                                                >
-                                                  <ChevronsUpDown className="h-4 w-4" />
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent>
-                                                <p>
-                                                  Allow Generator to Set Any
-                                                  Value Between Min and Max
-                                                </p>
-                                              </TooltipContent>
-                                            </Tooltip>
-                                          </div>
-                                        </div>
+                                          </CommandList>
+                                        </Command>
                                       </div>
                                     )}
-                                  </Draggable>
-                                ))}
-                                {provided.placeholder}
-                              </div>
-                            )}
-                          </Droppable>
-                        </div>
-                      ))}
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-                <Button
-                  onClick={startSolve}
-                  className="w-full mt-4 transition-colors duration-200"
-                >
-                  Generate Meal Plan
-                </Button>
-                <Button
-                  onClick={clearMeals}
-                  className="w-full mt-4 transition-colors duration-200"
-                >
-                  Clear
-                </Button>
-              </div>
-              <div className="w-full lg:w-1/3 space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex justify-between items-center">
-                      <span>All Foods</span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          setShowAllFoodsSearch(!showAllFoodsSearch)
-                        }
-                      >
-                        <Search className="h-4 w-4" />
-                      </Button>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-6 pt-0">
-                    {showAllFoodsSearch && (
-                      <div className="mb-4">
-                        <Input
-                          type="text"
-                          placeholder="Search foods..."
-                          value={allFoodsSearchTerm}
-                          onChange={(e) =>
-                            setAllFoodsSearchTerm(e.target.value)
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key == "Escape") {
-                              setShowAllFoodsSearch(false);
-                            }
-                          }}
-                          className="w-full"
-                          ref={allFoodsSearchInputRef}
-                        />
-                      </div>
-                    )}
-                    <ScrollArea className="h-[200px]">
-                      <Droppable droppableId="all-foods">
-                        {(provided) => (
-                          <div
-                            {...provided.droppableProps}
-                            ref={provided.innerRef}
-                            className="space-y-2 h-full"
-                          >
-                            {filteredAllFoods.map((item, index) => (
-                              <Draggable
-                                key={item.draggable_id}
-                                draggableId={item.draggable_id}
-                                index={index}
-                              >
-                                {(provided) =>
-                                  generateFoodItem(
-                                    item,
-                                    foodDisplayType.AllFood,
-                                    undefined,
-                                    provided
-                                  )
-                                }
-                              </Draggable>
-                            ))}
-                            {provided.placeholder}
-                          </div>
-                        )}
-                      </Droppable>
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Required Foods</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="h-[200px]">
-                      <Droppable droppableId="required-foods">
-                        {(provided) => (
-                          <div
-                            {...provided.droppableProps}
-                            ref={provided.innerRef}
-                            className="h-full space-y-2"
-                          >
-                            {requiredFoods.map((item, index) => (
-                              <Draggable
-                                key={item.draggable_id}
-                                draggableId={item.draggable_id}
-                                index={index}
-                              >
-                                {(provided) => (
-                                  <div
-                                    ref={provided.innerRef}
-                                    {...provided.draggableProps}
-                                    {...provided.dragHandleProps}
-                                    className={`bg-secondary p-2 rounded-md flex justify-between items-center ${
-                                      item.inMeal ? "opacity-50" : ""
-                                    }`}
-                                  >
-                                    <span>
-                                      {getIcon(item)}
-                                      {item.name} - Calories: {item.calories}
-                                    </span>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => toggleRequired(item)}
-                                    >
-                                      <Minus className="h-4 w-4" />
-                                    </Button>
+                                    {meal.items.map((item, index) => (
+                                      <Draggable
+                                        key={item.draggable_id}
+                                        draggableId={
+                                          item.draggable_id + "_meal"
+                                        }
+                                        index={index}
+                                      >
+                                        {(provided) => (
+                                          <div
+                                            ref={provided.innerRef}
+                                            {...provided.draggableProps}
+                                            {...provided.dragHandleProps}
+                                            className="bg-secondary p-3 rounded-md"
+                                          >
+                                            <div className="flex justify-between items-center">
+                                              <span className="font-medium">
+                                                {getIcon(item)}
+                                                {item.name}
+                                              </span>
+                                              <div className="flex items-center space-x-2">
+                                                {!item.usingFoodUnits ? (
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <div>
+                                                        <div
+                                                          contentEditable
+                                                          suppressContentEditableWarning
+                                                          onKeyDown={(e) =>
+                                                            restrictToNumbers(
+                                                              e as unknown as KeyboardEvent
+                                                            )
+                                                          } // This is insane but what I want
+                                                          onBlur={(e) =>
+                                                            updateMinMaxServings(
+                                                              e,
+                                                              meal,
+                                                              item,
+                                                              true
+                                                            )
+                                                          }
+                                                          className="text-xs text-muted-foreground"
+                                                        >
+                                                          {item.max_serving.toFixed(
+                                                            1
+                                                          )}
+                                                        </div>
+                                                        <div
+                                                          contentEditable
+                                                          suppressContentEditableWarning
+                                                          onKeyDown={(e) =>
+                                                            restrictToNumbers(
+                                                              e as unknown as KeyboardEvent
+                                                            )
+                                                          } // This is insane but what I want
+                                                          onBlur={(e) =>
+                                                            updateMinMaxServings(
+                                                              e,
+                                                              meal,
+                                                              item,
+                                                              false
+                                                            )
+                                                          }
+                                                          className="text-xs text-muted-foreground"
+                                                        >
+                                                          {item.min_serving.toFixed(
+                                                            1
+                                                          )}
+                                                        </div>
+                                                      </div>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                      <p>Max / Min Serving</p>
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                ) : (
+                                                  <></>
+                                                  // <Tooltip>
+                                                  //   <TooltipTrigger asChild>
+                                                  //     <div className="text-muted-foreground">
+                                                  //       {item.units +
+                                                  //         " " +
+                                                  //         item.unit_name}
+                                                  //     </div>
+                                                  //   </TooltipTrigger>
+                                                  //   <TooltipContent>
+                                                  //     <p>Units in 1 Serving</p>
+                                                  //   </TooltipContent>
+                                                  // </Tooltip>
+                                                )}
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Input
+                                                      type="number"
+                                                      value={
+                                                        item.servings ?? ""
+                                                      }
+                                                      // # Limit by min/max or no?
+                                                      // min={item.min_serving}
+                                                      // max={item.max_serving}
+                                                      min={0}
+                                                      max={9999}
+                                                      step={item.serving_step}
+                                                      onChange={(e) =>
+                                                        updateServings(
+                                                          e,
+                                                          meal,
+                                                          item
+                                                        )
+                                                      }
+                                                      className="w-20 dark:bg-neutral-900"
+                                                    />
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                    <p>Servings</p>
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                                {item.usingFoodUnits ? (
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <div className="text-muted-foreground">
+                                                        {"/ " +
+                                                          item.units +
+                                                          " " +
+                                                          item.unit_name}
+                                                      </div>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                      <p>Units in 1 Serving</p>
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                ) : (
+                                                  <></>
+                                                )}
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Button
+                                                      size="icon"
+                                                      variant="outline"
+                                                      className="dark:bg-neutral-900"
+                                                      onClick={() =>
+                                                        removeFromMeal(
+                                                          item,
+                                                          meal
+                                                        )
+                                                      }
+                                                    >
+                                                      <X className="h-4 w-4" />
+                                                    </Button>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                    <p>Remove From Meal</p>
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              </div>
+                                            </div>
+                                            <div className="flex justify-between space-x-2">
+                                              <div className="text-sm text-muted-foreground mt-1 inline">
+                                                Calories: {item.calories},
+                                                Carbs: {item.carbs}g, Protein:{" "}
+                                                {item.protein}
+                                                g, Fat: {item.fat}g
+                                              </div>
+                                              <div className="flex items-center space-x-2">
+                                                {item.units &&
+                                                item.unit_name ? (
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <Button
+                                                        size="icon"
+                                                        variant="outline"
+                                                        className="dark:bg-neutral-900"
+                                                        onClick={() =>
+                                                          setUsingFoodUnits(
+                                                            item,
+                                                            meal
+                                                          )
+                                                        }
+                                                      >
+                                                        {!item.usingFoodUnits ? (
+                                                          <Pizza className="h-4 w-4" />
+                                                        ) : (
+                                                          <Ruler className="h-4 w-4" />
+                                                        )}
+                                                      </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                      <p>
+                                                        Pizza: Generate based on
+                                                        number of servings
+                                                      </p>
+                                                      <p>
+                                                        Ruler: Generate based on
+                                                        number of units (e.g.
+                                                        grams)
+                                                      </p>
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                ) : (
+                                                  <></>
+                                                )}
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Button
+                                                      size="icon"
+                                                      variant="outline"
+                                                      disabled={
+                                                        item.usingFoodUnits
+                                                      }
+                                                      className={
+                                                        item.generateType ==
+                                                        "increase"
+                                                          ? "bg-neutral-200 dark:bg-neutral-950"
+                                                          : "dark:bg-neutral-900"
+                                                      }
+                                                      onClick={() =>
+                                                        setGenerateType(
+                                                          item,
+                                                          meal,
+                                                          GenerateType.OnlyIncrease
+                                                        )
+                                                      }
+                                                    >
+                                                      <ChevronUp className="h-4 w-4" />
+                                                    </Button>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                    <p>
+                                                      Only Allow Generator to
+                                                      Increase to Max Servings
+                                                    </p>
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Button
+                                                      size="icon"
+                                                      variant="outline"
+                                                      disabled={
+                                                        item.usingFoodUnits
+                                                      }
+                                                      className={
+                                                        item.generateType ==
+                                                        "decrease"
+                                                          ? "bg-neutral-200 dark:bg-neutral-950"
+                                                          : "dark:bg-neutral-900"
+                                                      }
+                                                      onClick={() =>
+                                                        setGenerateType(
+                                                          item,
+                                                          meal,
+                                                          GenerateType.OnlyDecrease
+                                                        )
+                                                      }
+                                                    >
+                                                      <ChevronDown className="h-4 w-4" />
+                                                    </Button>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                    <p>
+                                                      Only Allow Generator to
+                                                      Decrease to Min Servings
+                                                    </p>
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Button
+                                                      size="icon"
+                                                      variant="outline"
+                                                      disabled={
+                                                        item.usingFoodUnits
+                                                      }
+                                                      className={
+                                                        item.generateType ==
+                                                        "equal"
+                                                          ? "bg-neutral-200 dark:bg-neutral-950"
+                                                          : "dark:bg-neutral-900"
+                                                      }
+                                                      onClick={() =>
+                                                        setGenerateType(
+                                                          item,
+                                                          meal,
+                                                          GenerateType.KeepEqual
+                                                        )
+                                                      }
+                                                    >
+                                                      <Equal className="h-4 w-4" />
+                                                    </Button>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                    <p>
+                                                      Only Allow Generator to
+                                                      Keep Serving Count
+                                                    </p>
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Button
+                                                      size="icon"
+                                                      variant="outline"
+                                                      disabled={
+                                                        item.usingFoodUnits
+                                                      }
+                                                      className={
+                                                        item.generateType ==
+                                                        "bounded-any"
+                                                          ? "bg-neutral-200 dark:bg-neutral-950"
+                                                          : "dark:bg-neutral-900"
+                                                      }
+                                                      onClick={() =>
+                                                        setGenerateType(
+                                                          item,
+                                                          meal,
+                                                          GenerateType.AnyWithinBounds
+                                                        )
+                                                      }
+                                                    >
+                                                      <ChevronsUpDown className="h-4 w-4" />
+                                                    </Button>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                    <p>
+                                                      Allow Generator to Set Any
+                                                      Value Between Min and Max
+                                                    </p>
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </Draggable>
+                                    ))}
+                                    {provided.placeholder}
                                   </div>
                                 )}
-                              </Draggable>
-                            ))}
-                            {provided.placeholder}
-                          </div>
-                        )}
-                      </Droppable>
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Disabled Foods</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ScrollArea className="h-[100px]">
-                      <Droppable droppableId="disabled-foods">
-                        {(provided) => (
-                          <div
-                            {...provided.droppableProps}
-                            ref={provided.innerRef}
-                            className="space-y-2 h-full"
-                          >
-                            {disabledFoods.map((item, index) => (
-                              <Draggable
-                                key={item.draggable_id}
-                                draggableId={item.draggable_id}
-                                index={index}
-                              >
-                                {(provided) => (
-                                  <div
-                                    ref={provided.innerRef}
-                                    {...provided.draggableProps}
-                                    {...provided.dragHandleProps}
-                                    className={`bg-secondary p-2 rounded-md flex justify-between items-center ${
-                                      item.inMeal ? "opacity-50" : ""
-                                    }`}
-                                  >
-                                    <span>
-                                      {getIcon(item)}
-                                      {item.name} - Calories: {item.calories}
-                                    </span>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => enableFood(item)}
-                                    >
-                                      <RotateCcw className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                )}
-                              </Draggable>
-                            ))}
-                          </div>
-                        )}
-                      </Droppable>
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Nutrition Quota</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {Object.entries(ranges).map(([key, quotas]) => (
-                        <div key={key}>
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="font-medium">{key}</span>
-                            <div className="text-sm">
-                              <span
-                                contentEditable
-                                suppressContentEditableWarning
-                                onKeyDown={(e) =>
-                                  restrictToNumbers(
-                                    e as unknown as KeyboardEvent
-                                  )
-                                } // This is insane but what I want
-                                onBlur={(e) =>
-                                  updateTarget(
-                                    key as
-                                      | "Calories"
-                                      | "Fat"
-                                      | "Carbs"
-                                      | "Protein",
-                                    e,
-                                    "min"
-                                  )
-                                }
-                                className="px-1 rounded bg-secondary"
-                              >
-                                {quotas.min}
-                              </span>
-                              <span> / {quotas.total.toFixed(2)} / </span>
-                              <span
-                                contentEditable
-                                suppressContentEditableWarning
-                                onBlur={(e) =>
-                                  updateTarget(
-                                    key as
-                                      | "Calories"
-                                      | "Fat"
-                                      | "Carbs"
-                                      | "Protein",
-                                    e,
-                                    "max"
-                                  )
-                                }
-                                className="px-1 rounded bg-secondary"
-                              >
-                                {quotas.max}
-                              </span>
+                              </Droppable>
                             </div>
+                          ))}
+                        </ScrollArea>
+                      </CardContent>
+                    </Card>
+                    <Button
+                      onClick={startSolve}
+                      className="w-full mt-4 transition-colors duration-200"
+                    >
+                      Generate Meal Plan
+                    </Button>
+                    <Button
+                      onClick={clearMeals}
+                      className="w-full mt-4 transition-colors duration-200"
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                  <div className="flex flex-col lg:flex-row gap-8">
+                    <div className="w-full lg:w-2/3 h-full">
+                      <Card>
+                        <CardHeader className="bg-primary dark:bg-neutral-300 text-primary-foreground mb-4 rounded">
+                          <CardTitle className="text-2xl flex items-center justify-between">
+                            <span>
+                              Meals for{" "}
+                              {
+                                [
+                                  "Monday",
+                                  "Tuesday",
+                                  "Wednesday",
+                                  "Thursday",
+                                  "Friday",
+                                  "Saturday",
+                                  "Sunday",
+                                ][selectedDay]
+                              }
+                            </span>
+                            <span className="text-xl font-normal">
+                              Total: ${price.toFixed(2)}
+                            </span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {/* ... (keep the existing meal list UI) */}
+                        </CardContent>
+                      </Card>
+                      <Button
+                        onClick={() => {
+                          startSolve();
+                          updateDayPlan(selectedDay, meals);
+                          updateDayRanges(selectedDay, ranges);
+                        }}
+                        className="w-full mt-4 transition-colors duration-200"
+                      >
+                        Generate Meal Plan for{" "}
+                        {
+                          [
+                            "Monday",
+                            "Tuesday",
+                            "Wednesday",
+                            "Thursday",
+                            "Friday",
+                            "Saturday",
+                            "Sunday",
+                          ][selectedDay]
+                        }
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          clearMeals();
+                          updateDayPlan(selectedDay, []);
+                          updateDayRanges(selectedDay, ranges);
+                        }}
+                        className="w-full mt-4 transition-colors duration-200"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                    <div className="w-full lg:w-1/3 space-y-6">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex justify-between items-center">
+                            <span>All Foods</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                setShowAllFoodsSearch(!showAllFoodsSearch)
+                              }
+                            >
+                              <Search className="h-4 w-4" />
+                            </Button>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-6 pt-0">
+                          {showAllFoodsSearch && (
+                            <div className="mb-4">
+                              <Input
+                                type="text"
+                                placeholder="Search foods..."
+                                value={allFoodsSearchTerm}
+                                onChange={(e) =>
+                                  setAllFoodsSearchTerm(e.target.value)
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key == "Escape") {
+                                    setShowAllFoodsSearch(false);
+                                  }
+                                }}
+                                className="w-full"
+                                ref={allFoodsSearchInputRef}
+                              />
+                            </div>
+                          )}
+                          <ScrollArea className="h-[200px]">
+                            <Droppable droppableId="all-foods">
+                              {(provided) => (
+                                <div
+                                  {...provided.droppableProps}
+                                  ref={provided.innerRef}
+                                  className="space-y-2 h-full"
+                                >
+                                  {filteredAllFoods.map((item, index) => (
+                                    <Draggable
+                                      key={item.draggable_id}
+                                      draggableId={item.draggable_id}
+                                      index={index}
+                                    >
+                                      {(provided) =>
+                                        generateFoodItem(
+                                          item,
+                                          foodDisplayType.AllFood,
+                                          undefined,
+                                          provided
+                                        )
+                                      }
+                                    </Draggable>
+                                  ))}
+                                  {provided.placeholder}
+                                </div>
+                              )}
+                            </Droppable>
+                          </ScrollArea>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Required Foods</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ScrollArea className="h-[200px]">
+                            <Droppable droppableId="required-foods">
+                              {(provided) => (
+                                <div
+                                  {...provided.droppableProps}
+                                  ref={provided.innerRef}
+                                  className="h-full space-y-2"
+                                >
+                                  {requiredFoods.map((item, index) => (
+                                    <Draggable
+                                      key={item.draggable_id}
+                                      draggableId={item.draggable_id}
+                                      index={index}
+                                    >
+                                      {(provided) => (
+                                        <div
+                                          ref={provided.innerRef}
+                                          {...provided.draggableProps}
+                                          {...provided.dragHandleProps}
+                                          className={`bg-secondary p-2 rounded-md flex justify-between items-center ${
+                                            item.inMeal ? "opacity-50" : ""
+                                          }`}
+                                        >
+                                          <span>
+                                            {getIcon(item)}
+                                            {item.name} - Calories:{" "}
+                                            {item.calories}
+                                          </span>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => toggleRequired(item)}
+                                          >
+                                            <Minus className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </Draggable>
+                                  ))}
+                                  {provided.placeholder}
+                                </div>
+                              )}
+                            </Droppable>
+                          </ScrollArea>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Disabled Foods</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ScrollArea className="h-[100px]">
+                            <Droppable droppableId="disabled-foods">
+                              {(provided) => (
+                                <div
+                                  {...provided.droppableProps}
+                                  ref={provided.innerRef}
+                                  className="space-y-2 h-full"
+                                >
+                                  {disabledFoods.map((item, index) => (
+                                    <Draggable
+                                      key={item.draggable_id}
+                                      draggableId={item.draggable_id}
+                                      index={index}
+                                    >
+                                      {(provided) => (
+                                        <div
+                                          ref={provided.innerRef}
+                                          {...provided.draggableProps}
+                                          {...provided.dragHandleProps}
+                                          className={`bg-secondary p-2 rounded-md flex justify-between items-center ${
+                                            item.inMeal ? "opacity-50" : ""
+                                          }`}
+                                        >
+                                          <span>
+                                            {getIcon(item)}
+                                            {item.name} - Calories:{" "}
+                                            {item.calories}
+                                          </span>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => enableFood(item)}
+                                          >
+                                            <RotateCcw className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </Draggable>
+                                  ))}
+                                </div>
+                              )}
+                            </Droppable>
+                          </ScrollArea>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Nutrition Quota</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            {Object.entries(ranges).map(([key, quotas]) => (
+                              <div key={key}>
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="font-medium">{key}</span>
+                                  <div className="text-sm">
+                                    <span
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onKeyDown={(e) =>
+                                        restrictToNumbers(
+                                          e as unknown as KeyboardEvent
+                                        )
+                                      } // This is insane but what I want
+                                      onBlur={(e) =>
+                                        updateTarget(
+                                          key as
+                                            | "Calories"
+                                            | "Fat"
+                                            | "Carbs"
+                                            | "Protein",
+                                          e,
+                                          "min"
+                                        )
+                                      }
+                                      className="px-1 rounded bg-secondary"
+                                    >
+                                      {quotas.min}
+                                    </span>
+                                    <span> / {quotas.total.toFixed(2)} / </span>
+                                    <span
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onBlur={(e) =>
+                                        updateTarget(
+                                          key as
+                                            | "Calories"
+                                            | "Fat"
+                                            | "Carbs"
+                                            | "Protein",
+                                          e,
+                                          "max"
+                                        )
+                                      }
+                                      className="px-1 rounded bg-secondary"
+                                    >
+                                      {quotas.max}
+                                    </span>
+                                  </div>
+                                </div>
+                                <Progress segments={getSegments(quotas)} />
+                              </div>
+                            ))}
                           </div>
-                          <Progress segments={getSegments(quotas)} />
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+              <TabsContent value="week">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Week Overview</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-7 gap-4">
+                      {weekPlan.map((dayMeals, index) => (
+                        <div key={index} className="border p-4 rounded">
+                          <h3 className="font-bold mb-2">
+                            {
+                              ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][
+                                index
+                              ]
+                            }
+                          </h3>
+                          {dayMeals.map((meal) => (
+                            <div key={meal.id} className="mb-2">
+                              <h4 className="font-semibold">{meal.name}</h4>
+                              <ul className="list-disc list-inside">
+                                {meal.items.map((item) => (
+                                  <li key={item.name}>
+                                    {item.name} x{item.servings}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
+                          <div className="mt-2">
+                            <p>
+                              Calories:{" "}
+                              {weekRanges[index].Calories.total.toFixed(0)}
+                            </p>
+                            <p>
+                              Protein:{" "}
+                              {weekRanges[index].Protein.total.toFixed(0)}g
+                            </p>
+                          </div>
                         </div>
                       ))}
                     </div>
                   </CardContent>
                 </Card>
-              </div>
-            </div>
+                <div className="mt-4 flex justify-between">
+                  <Button onClick={generateWeekPlan}>
+                    Generate Full Week Plan
+                  </Button>
+                  <Button onClick={clearWeekPlan} variant="outline">
+                    Clear Week Plan
+                  </Button>
+                </div>
+              </TabsContent>
+            </Tabs>
             <div className="fixed bottom-4 right-4 flex space-x-2 z-50">
               <Button onClick={saveToLocalStorage}>
                 <Copy className="h-4 w-4 mr-2" />
