@@ -155,6 +155,26 @@ export default function FoodsEditor() {
   const NUTRITIONIX_APP_ID = process.env.NEXT_PUBLIC_NUTRITIONIX_APP_ID;
   const NUTRITIONIX_API_KEY = process.env.NEXT_PUBLIC_NUTRITIONIX_API_KEY;
 
+  const allFoods = Object.keys(foods).sort().reduce(
+    (obj, key) => { 
+      obj[key] = foods[key]; 
+      return obj;
+    }, 
+    {}
+  );;
+
+  const basicFoods = Object.values(foods)
+    .filter((food) => food.type == FoodType.Food)
+    .sort((foodA, foodB) => foodA.name.localeCompare(foodB.name));
+
+  const recipes = Object.values(foods)
+    .filter((food) => food.type == FoodType.Recipe)
+    .sort((foodA, foodB) => foodA.name.localeCompare(foodB.name));
+
+  const meals = Object.values(foods)
+    .filter((food) => food.type == FoodType.Meal)
+    .sort((foodA, foodB) => foodA.name.localeCompare(foodB.name));
+
   useEffect(() => {
     const storedFoods = localStorage.getItem("foods");
     if (storedFoods) {
@@ -1010,7 +1030,7 @@ export default function FoodsEditor() {
                             <SelectValue placeholder="Select ingredient" />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.entries(foods).map(([id, food]) => (
+                            {Object.entries(allFoods).map(([id, food]) => (
                               <SelectItem
                                 key={`m-${index}-${food.key}`}
                                 value={food.name}
@@ -1427,7 +1447,7 @@ export default function FoodsEditor() {
                             <SelectValue placeholder="Select ingredient" />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.entries(foods).map(([id, food]) => (
+                            {Object.entries(allFoods).map(([id, food]) => (
                               <SelectItem
                                 key={`m-${index}-${food.key}`}
                                 value={food.name}
@@ -1753,7 +1773,7 @@ export default function FoodsEditor() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Food List</CardTitle>
+            <CardTitle>Basic Food List</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -1770,10 +1790,10 @@ export default function FoodsEditor() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {Object.entries(foods).map(([name, food]) => (
-                    <TableRow key={name}>
+                  {Object.values(basicFoods).map((food) => (
+                    <TableRow key={food.name}>
                       <TableCell>
-                        {name}
+                        {food.name}
                         {food.unit_name && food.units
                           ? ` ${food.units} ${food.unit_name}`
                           : ""}
@@ -1786,14 +1806,130 @@ export default function FoodsEditor() {
                       <TableCell>
                         <div className="flex space-x-2">
                           <Button
-                            onClick={() => loadFood(name)}
+                            onClick={() => loadFood(food.name)}
                             variant="outline"
                             size="sm"
                           >
                             Edit
                           </Button>
                           <Button
-                            onClick={() => deleteFood(name)}
+                            onClick={() => deleteFood(food.name)}
+                            variant="destructive"
+                            size="sm"
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Recipe List</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Cost</TableHead>
+                    <TableHead>Calories</TableHead>
+                    <TableHead>Carbs</TableHead>
+                    <TableHead>Fat</TableHead>
+                    <TableHead>Protein</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Object.values(recipes).map((food) => (
+                    <TableRow key={food.name}>
+                      <TableCell>
+                        {food.name}
+                        {food.unit_name && food.units
+                          ? ` ${food.units} ${food.unit_name}`
+                          : ""}
+                      </TableCell>
+                      <TableCell>${food.cost.toFixed(2)}</TableCell>
+                      <TableCell>{food.calories}</TableCell>
+                      <TableCell>{food.carbs}g</TableCell>
+                      <TableCell>{food.fat}g</TableCell>
+                      <TableCell>{food.protein}g</TableCell>
+                      <TableCell>
+                        <div className="flex space-x-2">
+                          <Button
+                            onClick={() => loadFood(food.name)}
+                            variant="outline"
+                            size="sm"
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            onClick={() => deleteFood(food.name)}
+                            variant="destructive"
+                            size="sm"
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Meal List</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Cost</TableHead>
+                    <TableHead>Calories</TableHead>
+                    <TableHead>Carbs</TableHead>
+                    <TableHead>Fat</TableHead>
+                    <TableHead>Protein</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Object.values(meals).map((food) => (
+                    <TableRow key={food.name}>
+                      <TableCell>
+                        {food.name}
+                        {food.unit_name && food.units
+                          ? ` ${food.units} ${food.unit_name}`
+                          : ""}
+                      </TableCell>
+                      <TableCell>${food.cost.toFixed(2)}</TableCell>
+                      <TableCell>{food.calories}</TableCell>
+                      <TableCell>{food.carbs}g</TableCell>
+                      <TableCell>{food.fat}g</TableCell>
+                      <TableCell>{food.protein}g</TableCell>
+                      <TableCell>
+                        <div className="flex space-x-2">
+                          <Button
+                            onClick={() => loadFood(food.name)}
+                            variant="outline"
+                            size="sm"
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            onClick={() => deleteFood(food.name)}
                             variant="destructive"
                             size="sm"
                           >

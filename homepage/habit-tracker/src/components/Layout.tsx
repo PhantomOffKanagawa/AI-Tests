@@ -20,11 +20,11 @@ const Layout = ({ children } : LayoutProps) => {
           <Button variant="ghost" size="icon" onClick={toggleSidebar}>
             <Menu className="h-6 w-6" />
           </Button>
-          <Input 
+          {/* <Input 
             type="search" 
             placeholder="Search..." 
             className="w-64 bg-transparent"
-          />
+          /> */}
         </div>
         <div className="flex items-center space-x-2">
           <Button variant="ghost" size="icon">
