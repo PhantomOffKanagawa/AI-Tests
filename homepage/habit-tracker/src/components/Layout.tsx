@@ -63,16 +63,6 @@ const Layout = ({ children } : LayoutProps) => {
                 </Link>
               </li>
               <li>
-                <Link href="/meal-plan/beta-food-editor" className="block px-4 py-2 rounded-md hover:bg-gray-100">
-                  Edit Foods (Beta)
-                </Link>
-              </li>
-              <li>
-                <Link href="/meal-plan/beta-generator" className="block px-4 py-2 rounded-md hover:bg-gray-100">
-                  Generate (Beta)
-                </Link>
-              </li>
-              <li>
                 <a href="#" className="block px-4 py-2 rounded-md hover:bg-gray-100">
                   Settings
                 </a>

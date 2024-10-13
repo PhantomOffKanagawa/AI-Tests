@@ -72,6 +72,7 @@ export default function MealPlanGenerator() {
     { id: 1, name: "Breakfast", items: [] },
     { id: 3, name: "Lunch", items: [] },
     { id: 5, name: "Dinner", items: [] },
+    { id: 5, name: "Snacks", items: [] },
   ]);
   const [price, setPrice] = useState(0);
 
@@ -775,11 +776,9 @@ export default function MealPlanGenerator() {
 
     const predefinedGroupOrder = [
       "Breakfast",
-      "Morning snack",
       "Lunch",
-      "Afternoon snack",
       "Dinner",
-      "Evening snack",
+      "Snack",
     ];
 
     const foodsByGroup: { [key: string]: FoodItem[] } = {};

@@ -862,9 +862,7 @@ export default function FoodsEditor() {
                         <option value="Breakfast" />
                         <option value="Lunch" />
                         <option value="Dinner" />
-                        <option value="Morning snack" />
-                        <option value="Afternoon snack" />
-                        <option value="Evening snack" />
+                        <option value="Snacks" />
                       </datalist>
                     </div>
                     <div className="flex items-center space-x-4 mt-6 justify-evenly">
@@ -1317,9 +1315,7 @@ export default function FoodsEditor() {
                         <option value="Breakfast" />
                         <option value="Lunch" />
                         <option value="Dinner" />
-                        <option value="Morning snack" />
-                        <option value="Afternoon snack" />
-                        <option value="Evening snack" />
+                        <option value="Snacks" />
                       </datalist>
                     </div>
                     <div className="flex items-center space-x-4 mt-6 justify-evenly">
@@ -1739,9 +1735,7 @@ export default function FoodsEditor() {
                         <option value="Breakfast" />
                         <option value="Lunch" />
                         <option value="Dinner" />
-                        <option value="Morning snack" />
-                        <option value="Afternoon snack" />
-                        <option value="Evening snack" />
+                        <option value="Snacks" />
                       </datalist>
                     </div>
                     <div className="flex items-center space-x-4 mt-6 justify-evenly">
