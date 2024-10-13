@@ -33,8 +33,8 @@ interface PersistentGeneratable {
   serving_step: number;
   enabled: boolean;
   required: boolean;
-  display_group: string;
-  group: string; //! Rename generate_group
+  display_group?: string;
+  group?: string; //! Rename generate_group
   units?: number;
   unit_name?: string;
 }
@@ -47,6 +47,7 @@ interface LocalGeneratable extends PersistentGeneratable {
   inMeal?: boolean; //* Used to track if food dragged in meal (local)
   mealReason?: MealReason; //* Used to track how food got to meal (local)
   generateType?: GenerateType; //* Track what changes to make to food in generation, to be enum (local) ?
+  usingFoodUnits?: boolean; //* Whether to use food units or servings in generation (local)
 }
 
 export interface BasicFood extends LocalGeneratable {
@@ -88,9 +89,6 @@ export function createBasicFood(initialValues: Partial<BasicFood> = {}): BasicFo
     serving_step: 1,
     enabled: true,
     required: false,
-    display_group: "",
-    group: "",
-    servings: 1,
     ...initialValues, // Merge the initial values with defaults
   };
 }
@@ -110,11 +108,8 @@ export function createRecipe(initialValues: Partial<Recipe> = {}): Recipe {
     serving_step: 1,
     enabled: true,
     required: false,
-    display_group: "",
-    group: "",
     ingredients: [],
     instructions: [],
-    servings: 1,
     ...initialValues, // Merge the initial values with defaults
   };
 }
@@ -134,10 +129,7 @@ export function createMeal(initialValues: Partial<Meal> = {}): Meal {
     serving_step: 1,
     enabled: true,
     required: false,
-    display_group: "",
-    group: "",
     components: [],
-    servings: 1,
     ...initialValues, // Merge the initial values with defaults
   };
 }

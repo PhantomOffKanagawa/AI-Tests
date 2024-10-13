@@ -75,10 +75,24 @@ interface SearchResult {
   nix_item_id?: string;
 }
 
-const initialBasicForm = createBasicFood();
-const initialRecipeForm = createRecipe({
+// const initialBasicForm = createBasicFood();
+const initialBasicForm = {
+  type: FoodType.Food,
+  name: "",
+  enabled: true,
+  required: false,
+  display_group: "",
+  group: "",
+};
+const initialRecipeForm = {
+  type: FoodType.Recipe,
+  name: "",
+  enabled: true,
+  required: false,
+  display_group: "",
+  group: "",
   ingredients: [{ item: {} as BasicFood, quantity: 1, usingFoodUnits: false }],
-});
+};
 
 export default function FoodsEditor() {
   const [foods, setFoods] = useState<{ [key: string]: FoodItem }>({});
@@ -498,7 +512,7 @@ export default function FoodsEditor() {
                         type="text"
                         id="name"
                         name="name"
-                        value={basicForm.name}
+                        value={basicForm.name ?? ""}
                         onChange={(e) => handleInputChange(e, setBasicForm)}
                         required
                         placeholder="Hamburger"
@@ -511,7 +525,7 @@ export default function FoodsEditor() {
                         type="number"
                         id="cost"
                         name="cost"
-                        value={basicForm.cost}
+                        value={basicForm.cost ?? ""}
                         onChange={(e) => handleInputChange(e, setBasicForm)}
                         required
                         step="0.01"
@@ -596,6 +610,7 @@ export default function FoodsEditor() {
                         step="0.5"
                         placeholder="1"
                         className="mt-1"
+                        required
                       />
                     </div>
                     <div>
@@ -610,6 +625,7 @@ export default function FoodsEditor() {
                         step="0.5"
                         placeholder="1"
                         className="mt-1"
+                        required
                       />
                     </div>
                     <div>
@@ -624,6 +640,7 @@ export default function FoodsEditor() {
                         step="0.5"
                         placeholder="0.5"
                         className="mt-1"
+                        required
                       />
                     </div>
                     <div>

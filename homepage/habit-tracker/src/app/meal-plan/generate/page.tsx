@@ -40,6 +40,8 @@ import {
   ChevronDown,
   Equal,
   ChevronsUpDown,
+  Pizza,
+  Ruler,
 } from "lucide-react";
 import Layout from "@/components/Layout";
 import {
@@ -179,10 +181,11 @@ export default function MealPlanGenerator() {
     const itemIndex = newMeals[mealIndex].items.findIndex(
       (i) => i.name === food.name
     );
-    const newServings: number = e.target.value
-      ? parseFloat(parseFloat(e.target.value).toFixed(2))
-      : 0;
-    newMeals[mealIndex].items[itemIndex].servings = newServings;
+    if (e.target.value) {
+      newMeals[mealIndex].items[itemIndex].servings = parseFloat(parseFloat(e.target.value).toFixed(2));
+    } else {
+      delete newMeals[mealIndex].items[itemIndex].servings;
+    }
     newMeals[mealIndex].items[itemIndex].mealReason = MealReason.Manual;
 
     newFoods[food.name].servings = e.target.value;
@@ -234,11 +237,19 @@ export default function MealPlanGenerator() {
 
     meals.forEach((meal) => {
       meal.items.forEach((item) => {
-        totalCalories += item.calories * item.servings;
-        totalProtein += item.protein * item.servings;
-        totalCarbs += item.carbs * item.servings;
-        totalFat += item.fat * item.servings;
-        totalPrice += item.cost * item.servings;
+        if (item.servings) {
+
+        const quantity =
+          item.usingFoodUnits && item.units && item.unit_name
+            ? item.servings / item.units
+            : item.servings;
+
+        totalCalories += item.calories * quantity;
+        totalProtein += item.protein * quantity;
+        totalCarbs += item.carbs * quantity;
+        totalFat += item.fat * quantity;
+        totalPrice += item.cost * quantity;
+        }
       });
     });
 
@@ -385,6 +396,37 @@ export default function MealPlanGenerator() {
 
     setFoods(newFoods);
     setMeals(newMeals);
+  };
+
+  const setUsingFoodUnits = (item: FoodItem, meal: GeneratorList) => {
+    setGenerateType(
+      item,
+      meal,
+      GenerateType.KeepEqual
+    );
+
+    const newMeals = [...meals];
+    const newFoods = { ...foods };
+
+    const mealIndex = newMeals.findIndex((m) => m.id === meal.id);
+    const itemIndex = newMeals[mealIndex].items.findIndex(
+      (i) => i.name === item.name
+    );
+
+    const servings = (newFoods[item.name].servings) ? newFoods[item.name].servings : 0;
+    const convertedServings = (!newFoods[item.name].usingFoodUnits) ? (newFoods[item.name].units as number) * (servings as number) : (servings as number) / (newFoods[item.name].units as number);
+    const usingFoodUnits = newFoods[item.name].usingFoodUnits ? false : true;
+
+    newMeals[mealIndex].items[itemIndex].servings = convertedServings;
+    newMeals[mealIndex].items[itemIndex].usingFoodUnits = usingFoodUnits;
+    newMeals[mealIndex].items[itemIndex].mealReason = MealReason.Manual;
+
+    newFoods[item.name].servings = convertedServings;
+    newFoods[item.name].usingFoodUnits = usingFoodUnits;
+    newFoods[item.name].mealReason = MealReason.Manual;
+
+    setMeals(newMeals);
+    setFoods(newFoods);
   };
 
   const setGenerateType = (
@@ -662,8 +704,14 @@ export default function MealPlanGenerator() {
       } else {
         switch (food_data.generateType) {
           case GenerateType.KeepEqual: {
+            if (!food_data.servings) break;
+            const quantity =
+            food_data.usingFoodUnits && food_data.units && food_data.unit_name
+              ? food_data.servings / food_data.units
+              : food_data.servings;
+
             problem.constraints[food] = {
-              equal: food_data.servings,
+              equal: quantity,
             };
             break;
           }
@@ -977,64 +1025,80 @@ export default function MealPlanGenerator() {
                                             {item.name}
                                           </span>
                                           <div className="flex items-center space-x-2">
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <div>
-                                                  <div
-                                                    contentEditable
-                                                    suppressContentEditableWarning
-                                                    onKeyDown={(e) =>
-                                                      restrictToNumbers(
-                                                        e as unknown as KeyboardEvent
-                                                      )
-                                                    } // This is insane but what I want
-                                                    onBlur={(e) =>
-                                                      updateMinMaxServings(
-                                                        e,
-                                                        meal,
-                                                        item,
-                                                        true
-                                                      )
-                                                    }
-                                                    className="text-sm text-muted-foreground"
-                                                  >
-                                                    {item.max_serving.toFixed(
-                                                      1
-                                                    )}
+                                            {!item.usingFoodUnits ? (
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <div>
+                                                    <div
+                                                      contentEditable
+                                                      suppressContentEditableWarning
+                                                      onKeyDown={(e) =>
+                                                        restrictToNumbers(
+                                                          e as unknown as KeyboardEvent
+                                                        )
+                                                      } // This is insane but what I want
+                                                      onBlur={(e) =>
+                                                        updateMinMaxServings(
+                                                          e,
+                                                          meal,
+                                                          item,
+                                                          true
+                                                        )
+                                                      }
+                                                      className="text-sm text-muted-foreground"
+                                                    >
+                                                      {item.max_serving.toFixed(
+                                                        1
+                                                      )}
+                                                    </div>
+                                                    <div
+                                                      contentEditable
+                                                      suppressContentEditableWarning
+                                                      onKeyDown={(e) =>
+                                                        restrictToNumbers(
+                                                          e as unknown as KeyboardEvent
+                                                        )
+                                                      } // This is insane but what I want
+                                                      onBlur={(e) =>
+                                                        updateMinMaxServings(
+                                                          e,
+                                                          meal,
+                                                          item,
+                                                          false
+                                                        )
+                                                      }
+                                                      className="text-sm text-muted-foreground"
+                                                    >
+                                                      {item.min_serving.toFixed(
+                                                        1
+                                                      )}
+                                                    </div>
                                                   </div>
-                                                  <div
-                                                    contentEditable
-                                                    suppressContentEditableWarning
-                                                    onKeyDown={(e) =>
-                                                      restrictToNumbers(
-                                                        e as unknown as KeyboardEvent
-                                                      )
-                                                    } // This is insane but what I want
-                                                    onBlur={(e) =>
-                                                      updateMinMaxServings(
-                                                        e,
-                                                        meal,
-                                                        item,
-                                                        false
-                                                      )
-                                                    }
-                                                    className="text-sm text-muted-foreground"
-                                                  >
-                                                    {item.min_serving.toFixed(
-                                                      1
-                                                    )}
-                                                  </div>
-                                                </div>
-                                              </TooltipTrigger>
-                                              <TooltipContent>
-                                                <p>Max / Min Serving</p>
-                                              </TooltipContent>
-                                            </Tooltip>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                  <p>Max / Min Serving</p>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            ) : (
+                                              <></>
+                                              // <Tooltip>
+                                              //   <TooltipTrigger asChild>
+                                              //     <div className="text-muted-foreground">
+                                              //       {item.units +
+                                              //         " " +
+                                              //         item.unit_name}
+                                              //     </div>
+                                              //   </TooltipTrigger>
+                                              //   <TooltipContent>
+                                              //     <p>Units in 1 Serving</p>
+                                              //   </TooltipContent>
+                                              // </Tooltip>
+                                            )}
                                             <Tooltip>
                                               <TooltipTrigger asChild>
                                                 <Input
                                                   type="number"
-                                                  value={item.servings}
+                                                  value={item.servings ?? ""}
                                                   // # Limit by min/max or no?
                                                   // min={item.min_serving}
                                                   // max={item.max_serving}
@@ -1055,6 +1119,23 @@ export default function MealPlanGenerator() {
                                                 <p>Servings</p>
                                               </TooltipContent>
                                             </Tooltip>
+                                            {item.usingFoodUnits ? (
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <div className="text-muted-foreground">
+                                                    {"/ " +
+                                                      item.units +
+                                                      " " +
+                                                      item.unit_name}
+                                                  </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                  <p>Units in 1 Serving</p>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            ) : (
+                                              <></>
+                                            )}
                                             <Tooltip>
                                               <TooltipTrigger asChild>
                                                 <Button
@@ -1081,11 +1162,50 @@ export default function MealPlanGenerator() {
                                             g, Fat: {item.fat}g
                                           </div>
                                           <div className="flex items-center space-x-2">
+                                          {item.units && item.unit_name ? (
                                             <Tooltip>
                                               <TooltipTrigger asChild>
                                                 <Button
                                                   size="icon"
                                                   variant="outline"
+                                                  className={
+                                                    item.generateType ==
+                                                    "increase"
+                                                      ? "bg-neutral-200"
+                                                      : ""
+                                                  }
+                                                  onClick={() =>
+                                                    setUsingFoodUnits(
+                                                      item,
+                                                      meal
+                                                    )
+                                                  }
+                                                >
+                                                  {!item.usingFoodUnits ? (
+                                                    <Pizza className="h-4 w-4" />
+                                                  ) : (
+                                                    <Ruler className="h-4 w-4" />
+                                                  )}
+                                                </Button>
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                <p>
+                                                  Pizza: Generate based on
+                                                  number of servings
+                                                </p>
+                                                <p>
+                                                  Ruler: Generate based on
+                                                  number of units (e.g. grams)
+                                                </p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          ) : (<></>)}
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Button
+                                                  size="icon"
+                                                  variant="outline"
+                                                  disabled={item.usingFoodUnits}
                                                   className={
                                                     item.generateType ==
                                                     "increase"
@@ -1115,6 +1235,7 @@ export default function MealPlanGenerator() {
                                                 <Button
                                                   size="icon"
                                                   variant="outline"
+                                                  disabled={item.usingFoodUnits}
                                                   className={
                                                     item.generateType ==
                                                     "decrease"
@@ -1144,6 +1265,7 @@ export default function MealPlanGenerator() {
                                                 <Button
                                                   size="icon"
                                                   variant="outline"
+                                                  disabled={item.usingFoodUnits}
                                                   className={
                                                     item.generateType == "equal"
                                                       ? "bg-neutral-200"
@@ -1172,6 +1294,7 @@ export default function MealPlanGenerator() {
                                                 <Button
                                                   size="icon"
                                                   variant="outline"
+                                                  disabled={item.usingFoodUnits}
                                                   className={
                                                     item.generateType ==
                                                     "bounded-any"
