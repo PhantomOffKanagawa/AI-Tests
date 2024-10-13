@@ -14,14 +14,13 @@ const Layout = ({ children } : LayoutProps) => {
   };
 
   return (
-    <div className="dark:bg-neutral-950 min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-900 dark:to-gray-800">
+    <div className="dark:bg-neutral-950 min-h-screen bg-gradient-to-br from-neutral-100 to-neutral-200 dark:from-neutral-900 dark:to-neutral-950">
       {/* Top bar */}
-      <div className="dark:bg-neutral-400 fixed top-0 left-0 right-0 h-16 bg-white bg-opacity-70 dark:bg-opacity-70 backdrop-blur-md z-50 flex items-center justify-between px-4 shadow-sm">
+      <div className="dark:bg-neutral-900 fixed top-0 left-0 right-0 h-16 bg-white backdrop-blur-md z-50 flex items-center justify-between px-4 shadow-sm">
         <div className="flex items-center space-x-4">
           <Button variant="ghost" size="icon" onClick={toggleSidebar}>
             <Menu className="h-6 w-6" />
           </Button>
-          <ThemeToggle />
           {/* <Input 
             type="search" 
             placeholder="Search..." 
@@ -32,6 +31,7 @@ const Layout = ({ children } : LayoutProps) => {
           <Button variant="ghost" size="icon">
             <Edit className="h-5 w-5" />
           </Button>
+          <ThemeToggle />
           <Button variant="ghost" size="icon">
             <User className="h-5 w-5" />
           </Button>
@@ -39,7 +39,7 @@ const Layout = ({ children } : LayoutProps) => {
       </div>
 
       {/* Sidebar */}
-      <div className={`fixed top-16 left-0 bottom-0 w-64 bg-white dark:bg-neutral-800 bg-opacity-70 dark:bg-opacity-70 backdrop-blur-md transition-all duration-300 ease-in-out z-40 ${isSidebarExpanded ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`fixed top-16 left-0 bottom-0 w-64 bg-white dark:bg-neutral-800 transition-all duration-300 ease-in-out z-40 ${isSidebarExpanded ? 'translate-x-0' : '-translate-x-full'}`}>
         <nav className="p-4">
           {/* Add your sidebar menu items here */}
           <ul className="space-y-2">              <li>
