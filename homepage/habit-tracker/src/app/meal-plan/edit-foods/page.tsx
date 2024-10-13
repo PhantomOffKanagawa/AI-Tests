@@ -77,7 +77,7 @@ interface SearchResult {
 
 const initialBasicForm = createBasicFood();
 const initialRecipeForm = createRecipe({
-  ingredients: [{ item: {} as BasicFood, quantity: 1, unit: "g" }],
+  ingredients: [{ item: {} as BasicFood, quantity: 1, usingFoodUnits: false }],
 });
 
 export default function FoodsEditor() {
@@ -132,7 +132,7 @@ export default function FoodsEditor() {
   };
 
   const removeIngredient = (index: number) => {
-    console.log(index)
+    console.log(index);
     const newForm = { ...recipeForm };
     newForm.ingredients = newForm.ingredients.filter((_, i) => i !== index);
     setRecipeForm(newForm);
@@ -142,7 +142,7 @@ export default function FoodsEditor() {
     const newForm = { ...recipeForm };
     newForm.ingredients = [
       ...newForm.ingredients,
-      { item: {} as BasicFood, quantity: 1, unit: "g" },
+      { item: {} as BasicFood, quantity: 1, usingFoodUnits: false },
     ];
     setRecipeForm(newForm);
   };
@@ -224,11 +224,14 @@ export default function FoodsEditor() {
   const handleSubmit = (e: React.FormEvent, type: FoodType) => {
     e.preventDefault();
     if (type == FoodType.Food) {
+      console.log(basicForm);
+      basicForm.key = encodeURIComponent(basicForm.name);
       const newFoods = { ...foods, [basicForm.name]: basicForm };
       setFoods(newFoods);
       localStorage.setItem("foods", JSON.stringify(newFoods));
       setBasicForm(initialBasicForm);
     } else if (type == FoodType.Recipe) {
+      recipeForm.key = encodeURIComponent(recipeForm.name);
       const newFoods = { ...foods, [recipeForm.name]: recipeForm };
       setFoods(newFoods);
       localStorage.setItem("foods", JSON.stringify(newFoods));
@@ -247,7 +250,8 @@ export default function FoodsEditor() {
       }
       case FoodType.Food:
       default: {
-        setBasicForm(food);
+        food.type = FoodType.Food;
+        setBasicForm(food as BasicFood);
         setTab("basic");
         break;
       }
@@ -325,7 +329,7 @@ export default function FoodsEditor() {
         );
         detailedData = response.data.foods[0];
       }
-      const newFood: Food = {
+      const newFood: BasicFood = createBasicFood({
         name: detailedData.food_name,
         cost: 0, // Set a default cost or prompt user to enter
         calories: detailedData.nf_calories,
@@ -340,7 +344,7 @@ export default function FoodsEditor() {
         required: false,
         enabled: true,
         nutritionix_data: detailedData,
-      };
+      });
       setIsSearchDialogOpen(false);
       setBasicForm(newFood);
       setSearchResults([]);
@@ -352,6 +356,10 @@ export default function FoodsEditor() {
       console.error("Error fetching nutrition details:", error);
     }
     setIsLoading(false);
+  };
+
+  const round = (num: number, fractionDigits: number): number => {
+    return Number(num.toFixed(fractionDigits));
   };
 
   const calculateNutrition = () => {
@@ -366,12 +374,12 @@ export default function FoodsEditor() {
       let items = recipeForm.ingredients;
 
       items.forEach((item) => {
-        const quantity = item.quantity;
-        totalNutrition.cost += item.item.cost * quantity;
-        totalNutrition.calories += item.item.calories * quantity;
-        totalNutrition.carbs += item.item.carbs * quantity;
-        totalNutrition.fat += item.item.fat * quantity;
-        totalNutrition.protein += item.item.protein * quantity;
+        const quantity = (item.usingFoodUnits && item.item.units && item.item.unit_name) ? item.quantity / item.item.units : item.quantity;
+        totalNutrition.cost += round(item.item.cost * quantity, 1);
+        totalNutrition.calories += round(item.item.calories * quantity, 1);
+        totalNutrition.carbs += round(item.item.carbs * quantity, 1);
+        totalNutrition.fat += round(item.item.fat * quantity, 1);
+        totalNutrition.protein += round(item.item.protein * quantity, 1);
       });
 
       setRecipeForm({
@@ -477,7 +485,7 @@ export default function FoodsEditor() {
               </CardHeader>
               <CardContent>
                 <form
-                  onSubmit={(e) => handleSubmit(e, FoodType.Recipe)}
+                  onSubmit={(e) => handleSubmit(e, FoodType.Food)}
                   className="space-y-4"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -572,7 +580,7 @@ export default function FoodsEditor() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <div>
                       <Label htmlFor="min_serving">Min Servings</Label>
                       <Input
@@ -612,6 +620,32 @@ export default function FoodsEditor() {
                         min="0.5"
                         step="0.5"
                         placeholder="0.5"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="units">Units</Label>
+                      <Input
+                        type="number"
+                        id="units"
+                        name="units"
+                        value={basicForm.units}
+                        onChange={(e) => handleInputChange(e, setBasicForm)}
+                        min="0.1"
+                        step="0.1"
+                        placeholder="1"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="unit_name">Unit Name</Label>
+                      <Input
+                        type="text"
+                        id="unit_name"
+                        name="unit_name"
+                        value={basicForm.unit_name}
+                        onChange={(e) => handleInputChange(e, setBasicForm)}
+                        placeholder="g"
                         className="mt-1"
                       />
                     </div>
@@ -845,7 +879,7 @@ export default function FoodsEditor() {
                           </SelectTrigger>
                           <SelectContent>
                             {Object.entries(foods).map(([id, food]) => (
-                              <SelectItem key={food.key} value={food.key}>
+                              <SelectItem key={food.key} value={food.name}>
                                 {food.name}
                               </SelectItem>
                             ))}
@@ -863,14 +897,31 @@ export default function FoodsEditor() {
                           }
                           className="w-20"
                         />
-                        {/* <Input
-                          value={ing.unit}
-                          onChange={(e) =>
-                            updateIngredient(index, "unit", e.target.value)
-                          }
-                          className="w-20"
-                        /> */}
-                        <Label> Servings</Label>
+                        <Label>
+                          {" "}
+                          <Button
+                            type="button"
+                            variant="link"
+                            onClick={(e) =>
+                              updateIngredient(index, "usingFoodUnits", false)
+                            }
+                            className={!ing.usingFoodUnits ? "bg-neutral-200" : ""}
+                          >
+                            Servings
+                          </Button>{" "}
+                          {(ing.item.units != undefined && ing.item.unit_name != undefined) ? (<> or{" "}
+                          <Button
+                            type="button"
+                            variant="link"
+                            onClick={(e) =>
+                              updateIngredient(index, "usingFoodUnits", true)
+                            }
+                            className={ing.usingFoodUnits ? "bg-neutral-200" : ""}
+                          >
+                            {ing.item.unit_name}
+                          </Button></>
+                        ) : (<></>)}
+                        </Label>
                       </div>
                     ))}
                     <Button
@@ -898,7 +949,9 @@ export default function FoodsEditor() {
                         className="flex space-x-2 space-y-2 items-center justify-between"
                         key={`instruction-${index}`}
                       >
-                        <div>{index + 1}. {inst}</div>
+                        <div>
+                          {index + 1}. {inst}
+                        </div>
                         <Button
                           type="button"
                           onClick={() => removeInstruction(index)}
@@ -1163,7 +1216,14 @@ export default function FoodsEditor() {
                 <TableBody>
                   {Object.entries(foods).map(([name, food]) => (
                     <TableRow key={name}>
-                      <TableCell>{name}</TableCell>
+                      <TableCell>
+                        {name}
+                        {food.unit_name != "Servings" &&
+                        food.units != 1 &&
+                        food.units != undefined
+                          ? ` ${food.units} ${food.unit_name}`
+                          : ""}
+                      </TableCell>
                       <TableCell>${food.cost.toFixed(2)}</TableCell>
                       <TableCell>{food.calories}</TableCell>
                       <TableCell>{food.carbs}g</TableCell>

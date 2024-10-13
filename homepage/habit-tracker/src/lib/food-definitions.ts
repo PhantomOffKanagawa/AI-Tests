@@ -1,3 +1,5 @@
+import { LargeNumberLike } from "crypto";
+
 export enum GenerateType {
   OnlyIncrease = "increase",
   OnlyDecrease = "decrease",
@@ -33,6 +35,8 @@ interface PersistentGeneratable {
   required: boolean;
   display_group: string;
   group: string; //! Rename generate_group
+  units?: number;
+  unit_name?: string;
 }
 
 interface LocalGeneratable extends PersistentGeneratable {
@@ -55,7 +59,7 @@ export interface Recipe extends LocalGeneratable {
   ingredients: Array<{
     item: BasicFood | Recipe;
     quantity: number;
-    unit: string;
+    usingFoodUnits: boolean;
   }>;
   instructions: string[];
   //   servings: number; // How many it makes
@@ -87,6 +91,8 @@ export function createBasicFood(initialValues: Partial<BasicFood> = {}): BasicFo
     display_group: "",
     group: "",
     servings: 1,
+    units: 1,
+    unit_name: "servings",
     ...initialValues, // Merge the initial values with defaults
   };
 }
@@ -111,6 +117,8 @@ export function createRecipe(initialValues: Partial<Recipe> = {}): Recipe {
     ingredients: [],
     instructions: [],
     servings: 1,
+    units: 1,
+    unit_name: "servings",
     ...initialValues, // Merge the initial values with defaults
   };
 }
@@ -134,6 +142,8 @@ export function createMeal(initialValues: Partial<Meal> = {}): Meal {
     group: "",
     components: [],
     servings: 1,
+    units: 1,
+    unit_name: "servings",
     ...initialValues, // Merge the initial values with defaults
   };
 }
