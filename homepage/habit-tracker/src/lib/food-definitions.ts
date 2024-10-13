@@ -91,8 +91,6 @@ export function createBasicFood(initialValues: Partial<BasicFood> = {}): BasicFo
     display_group: "",
     group: "",
     servings: 1,
-    units: 1,
-    unit_name: "servings",
     ...initialValues, // Merge the initial values with defaults
   };
 }
@@ -117,8 +115,6 @@ export function createRecipe(initialValues: Partial<Recipe> = {}): Recipe {
     ingredients: [],
     instructions: [],
     servings: 1,
-    units: 1,
-    unit_name: "servings",
     ...initialValues, // Merge the initial values with defaults
   };
 }
@@ -142,8 +138,6 @@ export function createMeal(initialValues: Partial<Meal> = {}): Meal {
     group: "",
     components: [],
     servings: 1,
-    units: 1,
-    unit_name: "servings",
     ...initialValues, // Merge the initial values with defaults
   };
 }

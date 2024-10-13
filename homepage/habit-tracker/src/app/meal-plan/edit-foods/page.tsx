@@ -374,7 +374,10 @@ export default function FoodsEditor() {
       let items = recipeForm.ingredients;
 
       items.forEach((item) => {
-        const quantity = (item.usingFoodUnits && item.item.units && item.item.unit_name) ? item.quantity / item.item.units : item.quantity;
+        const quantity =
+          item.usingFoodUnits && item.item.units && item.item.unit_name
+            ? item.quantity / item.item.units
+            : item.quantity;
         totalNutrition.cost += round(item.item.cost * quantity, 1);
         totalNutrition.calories += round(item.item.calories * quantity, 1);
         totalNutrition.carbs += round(item.item.carbs * quantity, 1);
@@ -629,7 +632,7 @@ export default function FoodsEditor() {
                         type="number"
                         id="units"
                         name="units"
-                        value={basicForm.units}
+                        value={basicForm.units ?? ""}
                         onChange={(e) => handleInputChange(e, setBasicForm)}
                         min="0.1"
                         step="0.1"
@@ -643,7 +646,7 @@ export default function FoodsEditor() {
                         type="text"
                         id="unit_name"
                         name="unit_name"
-                        value={basicForm.unit_name}
+                        value={basicForm.unit_name ?? ""}
                         onChange={(e) => handleInputChange(e, setBasicForm)}
                         placeholder="g"
                         className="mt-1"
@@ -658,7 +661,7 @@ export default function FoodsEditor() {
                         type="text"
                         id="group"
                         name="group"
-                        value={basicForm.group}
+                        value={basicForm.group ?? ""}
                         onChange={(e) => handleInputChange(e, setBasicForm)}
                         placeholder="proteinBar"
                         className="mt-1"
@@ -670,7 +673,7 @@ export default function FoodsEditor() {
                         type="text"
                         id="display_group"
                         name="display_group"
-                        value={basicForm.display_group}
+                        value={basicForm.display_group ?? ""}
                         onChange={(e) => handleInputChange(e, setBasicForm)}
                         placeholder="Dinner"
                         list="display-groups"
@@ -905,22 +908,37 @@ export default function FoodsEditor() {
                             onClick={(e) =>
                               updateIngredient(index, "usingFoodUnits", false)
                             }
-                            className={!ing.usingFoodUnits ? "bg-neutral-200" : ""}
+                            className={
+                              !ing.usingFoodUnits ? "bg-neutral-200" : ""
+                            }
                           >
                             Servings
                           </Button>{" "}
-                          {(ing.item.units != undefined && ing.item.unit_name != undefined) ? (<> or{" "}
-                          <Button
-                            type="button"
-                            variant="link"
-                            onClick={(e) =>
-                              updateIngredient(index, "usingFoodUnits", true)
-                            }
-                            className={ing.usingFoodUnits ? "bg-neutral-200" : ""}
-                          >
-                            {ing.item.unit_name}
-                          </Button></>
-                        ) : (<></>)}
+                          {ing.item.units != undefined &&
+                          ing.item.unit_name != undefined ? (
+                            <>
+                              {" "}
+                              or{" "}
+                              <Button
+                                type="button"
+                                variant="link"
+                                onClick={(e) =>
+                                  updateIngredient(
+                                    index,
+                                    "usingFoodUnits",
+                                    true
+                                  )
+                                }
+                                className={
+                                  ing.usingFoodUnits ? "bg-neutral-200" : ""
+                                }
+                              >
+                                {ing.item.unit_name}
+                              </Button>
+                            </>
+                          ) : (
+                            <></>
+                          )}
                         </Label>
                       </div>
                     ))}
@@ -1218,9 +1236,7 @@ export default function FoodsEditor() {
                     <TableRow key={name}>
                       <TableCell>
                         {name}
-                        {food.unit_name != "Servings" &&
-                        food.units != 1 &&
-                        food.units != undefined
+                        {food.unit_name && food.units
                           ? ` ${food.units} ${food.unit_name}`
                           : ""}
                       </TableCell>
