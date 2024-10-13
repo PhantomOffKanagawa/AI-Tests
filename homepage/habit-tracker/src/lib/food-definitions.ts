@@ -12,12 +12,13 @@ export enum MealReason {
 
 export enum FoodType {
   Ingredient = "ingredient",
-  Food = "Food",
+  Food = "Basic Food",
   Recipe = "Recipe",
   Meal = "Meal",
 }
 
 interface PersistentGeneratable {
+  type: FoodType;
   name: string;
   calories: number;
   protein: number;
@@ -35,17 +36,18 @@ interface PersistentGeneratable {
 }
 
 interface LocalGeneratable extends PersistentGeneratable {
-  key: string; //! Used for React key (generated)
-  draggable_id: string; //! Used for Draggable key (generated)
-  servings: number; //* Number of servings generated (local)
-  meal_display_group: string; //* Group that food is dragged into (local)
-  inMeal: boolean; //* Used to track if food dragged in meal (local)
-  mealReason: MealReason; //* Used to track how food got to meal (local)
-  generateType: GenerateType; //* Track what changes to make to food in generation, to be enum (local) ?
+  key?: string; //! Used for React key (generated)
+  draggable_id?: string; //! Used for Draggable key (generated)
+  servings?: number; //* Number of servings generated (local)
+  meal_display_group?: string; //* Group that food is dragged into (local)
+  inMeal?: boolean; //* Used to track if food dragged in meal (local)
+  mealReason?: MealReason; //* Used to track how food got to meal (local)
+  generateType?: GenerateType; //* Track what changes to make to food in generation, to be enum (local) ?
 }
 
 export interface BasicFood extends LocalGeneratable {
   type: FoodType.Food;
+  nutritionix_data?: any; // Extra data tacked on from Nutritionix API
 }
 
 export interface Recipe extends LocalGeneratable {
@@ -67,6 +69,75 @@ export interface Meal extends LocalGeneratable {
   }>;
 }
 
+// Factory function to create BasicFood with optional initial values
+export function createBasicFood(initialValues: Partial<BasicFood> = {}): BasicFood {
+  return {
+    type: FoodType.Food,
+    name: "",
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+    cost: 0,
+    min_serving: 1,
+    max_serving: 1,
+    serving_step: 1,
+    enabled: true,
+    required: false,
+    display_group: "",
+    group: "",
+    servings: 1,
+    ...initialValues, // Merge the initial values with defaults
+  };
+}
+
+// Factory function to create Recipe with optional initial values
+export function createRecipe(initialValues: Partial<Recipe> = {}): Recipe {
+  return {
+    type: FoodType.Recipe,
+    name: "",
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+    cost: 0,
+    min_serving: 1,
+    max_serving: 1,
+    serving_step: 1,
+    enabled: true,
+    required: false,
+    display_group: "",
+    group: "",
+    ingredients: [],
+    instructions: [],
+    servings: 1,
+    ...initialValues, // Merge the initial values with defaults
+  };
+}
+
+// Factory function to create Meal with optional initial values
+export function createMeal(initialValues: Partial<Meal> = {}): Meal {
+  return {
+    type: FoodType.Meal,
+    name: "",
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+    cost: 0,
+    min_serving: 1,
+    max_serving: 1,
+    serving_step: 1,
+    enabled: true,
+    required: false,
+    display_group: "",
+    group: "",
+    components: [],
+    servings: 1,
+    ...initialValues, // Merge the initial values with defaults
+  };
+}
+
 export type FoodItem = BasicFood | Recipe | Meal;
 
 export interface GeneratorList {
@@ -84,7 +155,7 @@ export interface Range {
 export type GoalOptions = "Calories" | "Fat" | "Carbs" | "Protein";
 
 export type GoalRanges = {
-    [key in GoalOptions]: Range;
+  [key in GoalOptions]: Range;
 };
 
 // {

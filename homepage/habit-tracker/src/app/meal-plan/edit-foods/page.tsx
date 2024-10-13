@@ -13,7 +13,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardDescription,
+} from "@/components/ui/card";
 import {
   Plus,
   Minus,
@@ -38,23 +44,25 @@ import { Loader2 } from "lucide-react";
 import axios from "axios";
 import Quagga from "@ericblade/quagga2";
 import debounce from "lodash/debounce";
-
-interface Food {
-  name: string;
-  cost: number;
-  calories: number;
-  carbs: number;
-  fat: number;
-  protein: number;
-  min_serving: number;
-  max_serving: number;
-  serving_step: number;
-  group: string;
-  display_group: string;
-  required: boolean;
-  enabled: boolean;
-  nutritionix_data?: any;
-}
+import {
+  BasicFood,
+  createBasicFood,
+  FoodType,
+  createMeal,
+  createRecipe,
+  Recipe,
+  FoodItem,
+} from "@/lib/food-definitions";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 interface SearchResult {
   food_name: string;
@@ -67,25 +75,16 @@ interface SearchResult {
   nix_item_id?: string;
 }
 
-const initialForm: Food = {
-  name: "",
-  cost: 0,
-  calories: 0,
-  carbs: 0,
-  fat: 0,
-  protein: 0,
-  min_serving: 1,
-  max_serving: 1,
-  serving_step: 0.5,
-  group: "",
-  display_group: "",
-  required: false,
-  enabled: true,
-};
+const initialBasicForm = createBasicFood();
+const initialRecipeForm = createRecipe({
+  ingredients: [{ item: {} as BasicFood, quantity: 1, unit: "g" }],
+});
 
 export default function FoodsEditor() {
-  const [foods, setFoods] = useState<{ [key: string]: Food }>({});
-  const [form, setForm] = useState<Food>(initialForm);
+  const [foods, setFoods] = useState<{ [key: string]: FoodItem }>({});
+  const [basicForm, setBasicForm] = useState<BasicFood>(initialBasicForm);
+  const [recipeForm, setRecipeForm] = useState<Recipe>(initialRecipeForm);
+  const [instruction, setInstruction] = useState("");
   const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -94,14 +93,26 @@ export default function FoodsEditor() {
   const [isBarcodeDialogOpen, setIsBarcodeDialogOpen] = useState(false);
   const videoRef = useRef<HTMLDivElement>(null); //useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  
+  const [tab, setTab] = useState("basic");
+
   const NUTRITIONIX_APP_ID = process.env.NEXT_PUBLIC_NUTRITIONIX_APP_ID;
   const NUTRITIONIX_API_KEY = process.env.NEXT_PUBLIC_NUTRITIONIX_API_KEY;
 
   useEffect(() => {
     const storedFoods = localStorage.getItem("foods");
     if (storedFoods) {
-      setFoods(JSON.parse(storedFoods));
+      const storedFoodsObj = JSON.parse(storedFoods);
+      for (let key in storedFoodsObj) {
+        if (typeof storedFoodsObj[key].cost != "number")
+          delete storedFoodsObj[key];
+        if (storedFoodsObj[key].type == undefined)
+          storedFoodsObj[key].type = FoodType.Food;
+
+        const draggableId = encodeURIComponent(key);
+        storedFoodsObj[key].key = draggableId;
+      }
+
+      setFoods(storedFoodsObj);
     }
   }, []);
 
@@ -111,9 +122,47 @@ export default function FoodsEditor() {
     }
   }, [isBarcodeDialogOpen]);
 
+  const updateIngredient = (index: number, field: string, value: any) => {
+    const newForm = { ...recipeForm };
+    newForm.ingredients[index] = {
+      ...newForm.ingredients[index],
+      [field]: value,
+    };
+    setRecipeForm(newForm);
+  };
+
+  const removeIngredient = (index: number) => {
+    console.log(index)
+    const newForm = { ...recipeForm };
+    newForm.ingredients = newForm.ingredients.filter((_, i) => i !== index);
+    setRecipeForm(newForm);
+  };
+
+  const addIngredient = () => {
+    const newForm = { ...recipeForm };
+    newForm.ingredients = [
+      ...newForm.ingredients,
+      { item: {} as BasicFood, quantity: 1, unit: "g" },
+    ];
+    setRecipeForm(newForm);
+  };
+
+  const addInstruction = () => {
+    setRecipeForm({
+      ...recipeForm,
+      instructions: [...recipeForm.instructions, instruction],
+    });
+    setInstruction("");
+  };
+
+  const removeInstruction = (index: number) => {
+    const newForm = { ...recipeForm };
+    newForm.instructions = newForm.instructions.filter((_, i) => i !== index);
+    setRecipeForm(newForm);
+  };
+
   const debouncedSearch = useCallback(
     debounce(async (query: string) => {
-
       if (query.length < 3) return;
       setIsLoading(true);
       setError(null);
@@ -156,9 +205,12 @@ export default function FoodsEditor() {
     debouncedSearch(searchTerm);
   }, [searchTerm, debouncedSearch]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    setFormFunction: any
+  ) => {
     const { name, value, type, checked } = e.target;
-    setForm((prev) => ({
+    setFormFunction((prev) => ({
       ...prev,
       [name]:
         type === "checkbox"
@@ -169,16 +221,37 @@ export default function FoodsEditor() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent, type: FoodType) => {
     e.preventDefault();
-    const newFoods = { ...foods, [form.name]: form };
-    setFoods(newFoods);
-    localStorage.setItem("foods", JSON.stringify(newFoods));
-    setForm(initialForm);
+    if (type == FoodType.Food) {
+      const newFoods = { ...foods, [basicForm.name]: basicForm };
+      setFoods(newFoods);
+      localStorage.setItem("foods", JSON.stringify(newFoods));
+      setBasicForm(initialBasicForm);
+    } else if (type == FoodType.Recipe) {
+      const newFoods = { ...foods, [recipeForm.name]: recipeForm };
+      setFoods(newFoods);
+      localStorage.setItem("foods", JSON.stringify(newFoods));
+      setRecipeForm(initialRecipeForm);
+    }
   };
 
   const loadFood = (name: string) => {
-    setForm(foods[name]);
+    const food = foods[name];
+    console.log(food);
+    switch (food.type) {
+      case FoodType.Recipe: {
+        setRecipeForm(food);
+        setTab("recipe");
+        break;
+      }
+      case FoodType.Food:
+      default: {
+        setBasicForm(food);
+        setTab("basic");
+        break;
+      }
+    }
   };
 
   const deleteFood = (name: string) => {
@@ -221,7 +294,6 @@ export default function FoodsEditor() {
       alert("Please drop a valid JSON file.");
     }
   };
-
 
   const addSearchResult = async (item: SearchResult) => {
     // setIsSearchDialogOpen(false); // Better here??
@@ -270,7 +342,7 @@ export default function FoodsEditor() {
         nutritionix_data: detailedData,
       };
       setIsSearchDialogOpen(false);
-      setForm(newFood);
+      setBasicForm(newFood);
       setSearchResults([]);
       setSearchTerm("");
     } catch (error) {
@@ -280,6 +352,34 @@ export default function FoodsEditor() {
       console.error("Error fetching nutrition details:", error);
     }
     setIsLoading(false);
+  };
+
+  const calculateNutrition = () => {
+    if (recipeForm) {
+      let totalNutrition = {
+        cost: 0,
+        calories: 0,
+        carbs: 0,
+        fat: 0,
+        protein: 0,
+      };
+      let items = recipeForm.ingredients;
+
+      items.forEach((item) => {
+        const quantity = item.quantity;
+        totalNutrition.cost += item.item.cost * quantity;
+        totalNutrition.calories += item.item.calories * quantity;
+        totalNutrition.carbs += item.item.carbs * quantity;
+        totalNutrition.fat += item.item.fat * quantity;
+        totalNutrition.protein += item.item.protein * quantity;
+      });
+
+      setRecipeForm({
+        ...recipeForm,
+        ...totalNutrition,
+        ingredients: items,
+      });
+    }
   };
 
   const startBarcodeScanner = () => {
@@ -327,7 +427,7 @@ export default function FoodsEditor() {
         }
       );
       const foodData = response.data.foods[0];
-      const newFood: Food = {
+      const newFood: BasicFood = createBasicFood({
         name: foodData.food_name,
         cost: 0, // Set a default cost or prompt user to enter
         calories: foodData.nf_calories,
@@ -342,8 +442,8 @@ export default function FoodsEditor() {
         required: false,
         enabled: true,
         nutritionix_data: foodData,
-      };
-      setForm(newFood);
+      });
+      setBasicForm(newFood);
       setIsBarcodeDialogOpen(false);
     } catch (error) {
       setError(
@@ -354,325 +454,693 @@ export default function FoodsEditor() {
     setIsLoading(false);
   };
 
+  const onTabChange = (value: string) => {
+    setTab(value);
+  };
+
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-6">
-          Food Editor
-        </h1>
+        <h1 className="text-3xl font-bold mb-6">Food Editor</h1>
 
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Add/Edit Food</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="col-span-1 md:col-span-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    type="text"
-                    id="name"
-                    name="name"
-                    value={form.name}
-                    onChange={handleInputChange}
-                    required
-                    placeholder="Hamburger"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="cost">Cost ($)</Label>
-                  <Input
-                    type="number"
-                    id="cost"
-                    name="cost"
-                    value={form.cost}
-                    onChange={handleInputChange}
-                    required
-                    step="0.01"
-                    placeholder="1.99"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <Label htmlFor="calories">Calories</Label>
-                  <Input
-                    type="number"
-                    id="calories"
-                    name="calories"
-                    value={form.calories}
-                    onChange={handleInputChange}
-                    required
-                    min="0"
-                    placeholder="0"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="carbs">Carbs (g)</Label>
-                  <Input
-                    type="number"
-                    id="carbs"
-                    name="carbs"
-                    value={form.carbs}
-                    onChange={handleInputChange}
-                    required
-                    min="0"
-                    step="0.1"
-                    placeholder="0"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="fat">Fat (g)</Label>
-                  <Input
-                    type="number"
-                    id="fat"
-                    name="fat"
-                    value={form.fat}
-                    onChange={handleInputChange}
-                    required
-                    min="0"
-                    step="0.1"
-                    placeholder="0"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="protein">Protein (g)</Label>
-                  <Input
-                    type="number"
-                    id="protein"
-                    name="protein"
-                    value={form.protein}
-                    onChange={handleInputChange}
-                    required
-                    min="0"
-                    step="0.1"
-                    placeholder="0"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="min_serving">Min Servings</Label>
-                  <Input
-                    type="number"
-                    id="min_serving"
-                    name="min_serving"
-                    value={form.min_serving}
-                    onChange={handleInputChange}
-                    min="0.5"
-                    step="0.5"
-                    placeholder="1"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="max_serving">Max Servings</Label>
-                  <Input
-                    type="number"
-                    id="max_serving"
-                    name="max_serving"
-                    value={form.max_serving}
-                    onChange={handleInputChange}
-                    min="0.5"
-                    step="0.5"
-                    placeholder="1"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="serving_step">Serving Step</Label>
-                  <Input
-                    type="number"
-                    id="serving_step"
-                    name="serving_step"
-                    value={form.serving_step}
-                    onChange={handleInputChange}
-                    min="0.5"
-                    step="0.5"
-                    placeholder="0.5"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="group">Group</Label>
-                  <Input
-                    type="text"
-                    id="group"
-                    name="group"
-                    value={form.group}
-                    onChange={handleInputChange}
-                    placeholder="proteinBar"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="display_group">Display Group</Label>
-                  <Input
-                    type="text"
-                    id="display_group"
-                    name="display_group"
-                    value={form.display_group}
-                    onChange={handleInputChange}
-                    placeholder="Dinner"
-                    list="display-groups"
-                    className="mt-1"
-                  />
-                  <datalist id="display-groups">
-                    <option value="Breakfast" />
-                    <option value="Lunch" />
-                    <option value="Dinner" />
-                    <option value="Morning snack" />
-                    <option value="Afternoon snack" />
-                    <option value="Evening snack" />
-                  </datalist>
-                </div>
-                <div className="flex items-center space-x-4 mt-6">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="required"
-                      name="required"
-                      checked={form.required}
-                      onCheckedChange={(checked) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          required: checked as boolean,
-                        }))
-                      }
-                    />
-                    <Label htmlFor="required">Required</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="enabled"
-                      name="enabled"
-                      checked={form.enabled}
-                      onCheckedChange={(checked) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          enabled: checked as boolean,
-                        }))
-                      }
-                    />
-                    <Label htmlFor="enabled">Enabled</Label>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex space-x-2">
-                <Button type="submit" className="w-full md:w-auto">
-                  Add/Update Food
-                </Button>
-                <Dialog
-                  open={isSearchDialogOpen}
-                  onOpenChange={setIsSearchDialogOpen}
+        <Tabs value={tab} onValueChange={onTabChange} className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="basic">Basic Food</TabsTrigger>
+            <TabsTrigger value="recipe">Recipe</TabsTrigger>
+            <TabsTrigger value="meal">Meal</TabsTrigger>
+          </TabsList>
+          <TabsContent value="basic">
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle>Basic Food</CardTitle>
+                <CardDescription>Add/Edit Basic Food</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form
+                  onSubmit={(e) => handleSubmit(e, FoodType.Recipe)}
+                  className="space-y-4"
                 >
-                  <DialogTrigger asChild>
-                    <Button variant="outline" className="w-full md:w-auto">
-                      <Search className="w-4 h-4 mr-2" />
-                      Search Database
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Search Nutrition Database</DialogTitle>
-                    </DialogHeader>
-                    <div className="flex items-center space-x-2">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="col-span-1 md:col-span-2">
+                      <Label htmlFor="name">Name</Label>
                       <Input
                         type="text"
-                        placeholder="Search for a food..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        id="name"
+                        name="name"
+                        value={basicForm.name}
+                        onChange={(e) => handleInputChange(e, setBasicForm)}
+                        required
+                        placeholder="Hamburger"
+                        className="mt-1"
                       />
                     </div>
-                    {error && <p className="text-red-500 mt-2">{error}</p>}
-                    <ScrollArea className="h-[300px] mt-4">
-                      {isLoading ? (
-                        <div className="flex justify-center items-center h-full">
-                          <Loader2 className="w-6 h-6 animate-spin" />
-                        </div>
-                      ) : (
-                        searchResults.map((result, index) => (
-                          <div
-                            key={index}
-                            className="p-4 hover:bg-gray-100 cursor-pointer border-b"
-                            onClick={() => addSearchResult(result)}
-                          >
-                            <div className="flex items-center">
-                              <img
-                                src={result.photo.thumb}
-                                alt={result.food_name}
-                                className="w-12 h-12 object-cover rounded mr-4"
-                              />
-                              <div>
-                                <h3 className="font-bold text-lg">
-                                  {result.food_name}
-                                </h3>
-                                {result.brand_name && (
-                                  <p className="text-sm text-gray-600">
-                                    Brand: {result.brand_name}
-                                  </p>
-                                )}
-                                <p className="text-sm">
-                                  Serving: {result.serving_qty}{" "}
-                                  {result.serving_unit}
-                                </p>
-                                <p className="text-sm">
-                                  Calories: {result.nf_calories}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </ScrollArea>
-                  </DialogContent>
-                </Dialog>
-                <Dialog
-                  open={isBarcodeDialogOpen}
-                  onOpenChange={setIsBarcodeDialogOpen}
-                >
-                  <DialogTrigger asChild>
-                    <Button variant="outline" className="w-full md:w-auto">
-                      <Camera className="w-4 h-4 mr-2" />
-                      Scan Barcode
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Scan Barcode</DialogTitle>
-                    </DialogHeader>
-                    <div className="flex flex-col items-center">
-                      <div ref={videoRef} className="w-full max-w-sm mb-4" />
-                      <Button
-                        onClick={startBarcodeScanner}
-                        disabled={isLoading}
-                      >
-                        {isLoading ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          "Start Scanning"
-                        )}
-                      </Button>
-                      {error && <p className="text-red-500 mt-2">{error}</p>}
+                    <div>
+                      <Label htmlFor="cost">Cost ($)</Label>
+                      <Input
+                        type="number"
+                        id="cost"
+                        name="cost"
+                        value={basicForm.cost}
+                        onChange={(e) => handleInputChange(e, setBasicForm)}
+                        required
+                        step="0.01"
+                        placeholder="1.99"
+                        className="mt-1"
+                      />
                     </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <Label htmlFor="calories">Calories</Label>
+                      <Input
+                        type="number"
+                        id="calories"
+                        name="calories"
+                        value={basicForm.calories}
+                        onChange={(e) => handleInputChange(e, setBasicForm)}
+                        required
+                        min="0"
+                        placeholder="0"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="carbs">Carbs (g)</Label>
+                      <Input
+                        type="number"
+                        id="carbs"
+                        name="carbs"
+                        value={basicForm.carbs}
+                        onChange={(e) => handleInputChange(e, setBasicForm)}
+                        required
+                        min="0"
+                        step="0.1"
+                        placeholder="0"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="fat">Fat (g)</Label>
+                      <Input
+                        type="number"
+                        id="fat"
+                        name="fat"
+                        value={basicForm.fat}
+                        onChange={(e) => handleInputChange(e, setBasicForm)}
+                        required
+                        min="0"
+                        step="0.1"
+                        placeholder="0"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="protein">Protein (g)</Label>
+                      <Input
+                        type="number"
+                        id="protein"
+                        name="protein"
+                        value={basicForm.protein}
+                        onChange={(e) => handleInputChange(e, setBasicForm)}
+                        required
+                        min="0"
+                        step="0.1"
+                        placeholder="0"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="min_serving">Min Servings</Label>
+                      <Input
+                        type="number"
+                        id="min_serving"
+                        name="min_serving"
+                        value={basicForm.min_serving}
+                        onChange={(e) => handleInputChange(e, setBasicForm)}
+                        min="0.5"
+                        step="0.5"
+                        placeholder="1"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="max_serving">Max Servings</Label>
+                      <Input
+                        type="number"
+                        id="max_serving"
+                        name="max_serving"
+                        value={basicForm.max_serving}
+                        onChange={(e) => handleInputChange(e, setBasicForm)}
+                        min="0.5"
+                        step="0.5"
+                        placeholder="1"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="serving_step">Serving Step</Label>
+                      <Input
+                        type="number"
+                        id="serving_step"
+                        name="serving_step"
+                        value={basicForm.serving_step}
+                        onChange={(e) => handleInputChange(e, setBasicForm)}
+                        min="0.5"
+                        step="0.5"
+                        placeholder="0.5"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="group">Group</Label>
+                      <Input
+                        type="text"
+                        id="group"
+                        name="group"
+                        value={basicForm.group}
+                        onChange={(e) => handleInputChange(e, setBasicForm)}
+                        placeholder="proteinBar"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="display_group">Display Group</Label>
+                      <Input
+                        type="text"
+                        id="display_group"
+                        name="display_group"
+                        value={basicForm.display_group}
+                        onChange={(e) => handleInputChange(e, setBasicForm)}
+                        placeholder="Dinner"
+                        list="display-groups"
+                        className="mt-1"
+                      />
+                      <datalist id="display-groups">
+                        <option value="Breakfast" />
+                        <option value="Lunch" />
+                        <option value="Dinner" />
+                        <option value="Morning snack" />
+                        <option value="Afternoon snack" />
+                        <option value="Evening snack" />
+                      </datalist>
+                    </div>
+                    <div className="flex items-center space-x-4 mt-6 justify-evenly">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="required"
+                          name="required"
+                          checked={basicForm.required}
+                          onCheckedChange={(checked) =>
+                            setBasicForm((prev) => ({
+                              ...prev,
+                              required: checked as boolean,
+                            }))
+                          }
+                        />
+                        <Label htmlFor="required">Required</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="enabled"
+                          name="enabled"
+                          checked={basicForm.enabled}
+                          onCheckedChange={(checked) =>
+                            setBasicForm((prev) => ({
+                              ...prev,
+                              enabled: checked as boolean,
+                            }))
+                          }
+                        />
+                        <Label htmlFor="enabled">Enabled</Label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-2">
+                    <Button type="submit" className="w-full md:w-auto">
+                      Add/Update Food
+                    </Button>
+                    <Dialog
+                      open={isSearchDialogOpen}
+                      onOpenChange={setIsSearchDialogOpen}
+                    >
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className="w-full md:w-auto">
+                          <Search className="w-4 h-4 mr-2" />
+                          Search Database
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Search Nutrition Database</DialogTitle>
+                        </DialogHeader>
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            type="text"
+                            placeholder="Search for a food..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                          />
+                        </div>
+                        {error && <p className="text-red-500 mt-2">{error}</p>}
+                        <ScrollArea className="h-[300px] mt-4">
+                          {isLoading ? (
+                            <div className="flex justify-center items-center h-full">
+                              <Loader2 className="w-6 h-6 animate-spin" />
+                            </div>
+                          ) : (
+                            searchResults.map((result, index) => (
+                              <div
+                                key={index}
+                                className="p-4 hover:bg-gray-100 cursor-pointer border-b"
+                                onClick={() => addSearchResult(result)}
+                              >
+                                <div className="flex items-center">
+                                  <img
+                                    src={result.photo.thumb}
+                                    alt={result.food_name}
+                                    className="w-12 h-12 object-cover rounded mr-4"
+                                  />
+                                  <div>
+                                    <h3 className="font-bold text-lg">
+                                      {result.food_name}
+                                    </h3>
+                                    {result.brand_name && (
+                                      <p className="text-sm text-gray-600">
+                                        Brand: {result.brand_name}
+                                      </p>
+                                    )}
+                                    <p className="text-sm">
+                                      Serving: {result.serving_qty}{" "}
+                                      {result.serving_unit}
+                                    </p>
+                                    <p className="text-sm">
+                                      Calories: {result.nf_calories}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </ScrollArea>
+                      </DialogContent>
+                    </Dialog>
+                    <Dialog
+                      open={isBarcodeDialogOpen}
+                      onOpenChange={setIsBarcodeDialogOpen}
+                    >
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className="w-full md:w-auto">
+                          <Camera className="w-4 h-4 mr-2" />
+                          Scan Barcode
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Scan Barcode</DialogTitle>
+                        </DialogHeader>
+                        <div className="flex flex-col items-center">
+                          <div
+                            ref={videoRef}
+                            className="w-full max-w-sm mb-4"
+                          />
+                          <Button
+                            onClick={startBarcodeScanner}
+                            disabled={isLoading}
+                          >
+                            {isLoading ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              "Start Scanning"
+                            )}
+                          </Button>
+                          {error && (
+                            <p className="text-red-500 mt-2">{error}</p>
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="recipe">
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle>Recipe</CardTitle>
+                <CardDescription>Add/Edit Recipe</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form
+                  onSubmit={(e) => handleSubmit(e, FoodType.Recipe)}
+                  className="space-y-4"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="col-span-1 md:col-span-2">
+                      <Label htmlFor="name">Name</Label>
+                      <Input
+                        type="text"
+                        id="name"
+                        name="name"
+                        value={recipeForm.name}
+                        onChange={(e) => handleInputChange(e, setRecipeForm)}
+                        required
+                        placeholder="Hamburger"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>Ingredients</Label>
+                    {recipeForm.ingredients.map((ing, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center space-x-2 mt-2"
+                      >
+                        <Button
+                          type="button"
+                          onClick={() => removeIngredient(index)}
+                          variant="destructive"
+                          size="icon"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <Select
+                          onValueChange={(value) =>
+                            updateIngredient(index, "item", foods[value])
+                          }
+                          defaultValue={ing.item.key}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Select ingredient" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(foods).map(([id, food]) => (
+                              <SelectItem key={food.key} value={food.key}>
+                                {food.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          value={ing.quantity}
+                          onChange={(e) =>
+                            updateIngredient(
+                              index,
+                              "quantity",
+                              parseFloat(e.target.value)
+                            )
+                          }
+                          className="w-20"
+                        />
+                        {/* <Input
+                          value={ing.unit}
+                          onChange={(e) =>
+                            updateIngredient(index, "unit", e.target.value)
+                          }
+                          className="w-20"
+                        /> */}
+                        <Label> Servings</Label>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      onClick={addIngredient}
+                      className="mt-2 block"
+                    >
+                      <Plus className="h-4 w-4 mr-2 inline" /> Add Ingredient
+                    </Button>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="instructions">Instructions</Label>
+                    <Textarea
+                      id="instructions"
+                      value={instruction}
+                      onChange={(e) => setInstruction(e.target.value)}
+                      className="mb-2"
+                    />
+                    <Button type="button" onClick={addInstruction}>
+                      <Plus className="h-4 w-4 mr-2" /> Add Instruction
+                    </Button>
+                    {recipeForm.instructions.map((inst, index) => (
+                      <div
+                        className="flex space-x-2 space-y-2 items-center justify-between"
+                        key={`instruction-${index}`}
+                      >
+                        <div>{index + 1}. {inst}</div>
+                        <Button
+                          type="button"
+                          onClick={() => removeInstruction(index)}
+                          className="w-full md:w-auto"
+                          variant="destructive"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* <div>
+                    <Label htmlFor="servings">Servings</Label>
+                    <Input
+                      type="number"
+                      id="servings"
+                      name="servings"
+                      value={recipeForm.servings}
+                      onChange={(e) => handleInputChange(e, setRecipeForm)}
+                      required
+                    />
+                  </div> */}
+
+                  <Separator className="my-4" />
+                  {/* All Food Items */}
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="min_serving">Min Servings</Label>
+                      <Input
+                        type="number"
+                        id="min_serving"
+                        name="min_serving"
+                        value={recipeForm.min_serving}
+                        onChange={(e) => handleInputChange(e, setRecipeForm)}
+                        min="0.5"
+                        step="0.5"
+                        placeholder="1"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="max_serving">Max Servings</Label>
+                      <Input
+                        type="number"
+                        id="max_serving"
+                        name="max_serving"
+                        value={recipeForm.max_serving}
+                        onChange={(e) => handleInputChange(e, setRecipeForm)}
+                        min="0.5"
+                        step="0.5"
+                        placeholder="1"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="serving_step">Serving Step</Label>
+                      <Input
+                        type="number"
+                        id="serving_step"
+                        name="serving_step"
+                        value={recipeForm.serving_step}
+                        onChange={(e) => handleInputChange(e, setRecipeForm)}
+                        min="0.5"
+                        step="0.5"
+                        placeholder="0.5"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="group">Group</Label>
+                      <Input
+                        type="text"
+                        id="group"
+                        name="group"
+                        value={recipeForm.group}
+                        onChange={(e) => handleInputChange(e, setRecipeForm)}
+                        placeholder="proteinBar"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="display_group">Display Group</Label>
+                      <Input
+                        type="text"
+                        id="display_group"
+                        name="display_group"
+                        value={recipeForm.display_group}
+                        onChange={(e) => handleInputChange(e, setRecipeForm)}
+                        placeholder="Dinner"
+                        list="display-groups"
+                        className="mt-1"
+                      />
+                      <datalist id="display-groups">
+                        <option value="Breakfast" />
+                        <option value="Lunch" />
+                        <option value="Dinner" />
+                        <option value="Morning snack" />
+                        <option value="Afternoon snack" />
+                        <option value="Evening snack" />
+                      </datalist>
+                    </div>
+                    <div className="flex items-center space-x-4 mt-6 justify-evenly">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="required"
+                          name="required"
+                          checked={recipeForm.required}
+                          onCheckedChange={(checked) =>
+                            setRecipeForm((prev) => ({
+                              ...prev,
+                              required: checked as boolean,
+                            }))
+                          }
+                        />
+                        <Label htmlFor="required">Required</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="enabled"
+                          name="enabled"
+                          checked={recipeForm.enabled}
+                          onCheckedChange={(checked) =>
+                            setRecipeForm((prev) => ({
+                              ...prev,
+                              enabled: checked as boolean,
+                            }))
+                          }
+                        />
+                        <Label htmlFor="enabled">Enabled</Label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* GENERATED ITEMS */}
+
+                  <Separator className="my-4" />
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div>
+                      <Label htmlFor="calories">Calories</Label>
+                      <Input
+                        type="number"
+                        id="calories"
+                        name="calories"
+                        value={recipeForm.calories}
+                        onChange={(e) => handleInputChange(e, setRecipeForm)}
+                        required
+                        min="0"
+                        placeholder="0"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="carbs">Carbs (g)</Label>
+                      <Input
+                        type="number"
+                        id="carbs"
+                        name="carbs"
+                        value={recipeForm.carbs}
+                        onChange={(e) => handleInputChange(e, setRecipeForm)}
+                        required
+                        min="0"
+                        step="0.1"
+                        placeholder="0"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="fat">Fat (g)</Label>
+                      <Input
+                        type="number"
+                        id="fat"
+                        name="fat"
+                        value={recipeForm.fat}
+                        onChange={(e) => handleInputChange(e, setRecipeForm)}
+                        required
+                        min="0"
+                        step="0.1"
+                        placeholder="0"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="protein">Protein (g)</Label>
+                      <Input
+                        type="number"
+                        id="protein"
+                        name="protein"
+                        value={recipeForm.protein}
+                        onChange={(e) => handleInputChange(e, setRecipeForm)}
+                        required
+                        min="0"
+                        step="0.1"
+                        placeholder="0"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="cost">Cost ($)</Label>
+                      <Input
+                        type="number"
+                        id="cost"
+                        name="cost"
+                        value={recipeForm.cost}
+                        onChange={(e) => handleInputChange(e, setRecipeForm)}
+                        required
+                        step="0.01"
+                        placeholder="1.99"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={calculateNutrition}
+                    >
+                      Calculate Nutrition & Cost
+                    </Button>
+                    <Button type="submit" className="w-full md:w-auto">
+                      Add/Update Recipe
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="meal">
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle>Meal</CardTitle>
+                <CardDescription>Add/Edit Meal</CardDescription>
+              </CardHeader>
+              <CardContent></CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         <Card>
           <CardHeader>
