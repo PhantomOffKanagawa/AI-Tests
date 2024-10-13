@@ -52,6 +52,7 @@ import {
   createRecipe,
   Recipe,
   FoodItem,
+  Meal,
 } from "@/lib/food-definitions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
@@ -83,6 +84,16 @@ const initialBasicForm = {
   required: false,
   display_group: "",
   group: "",
+  cost: "",
+  calories: "",
+  carbs: "",
+  fat: "",
+  protein: "",
+  min_servings: "",
+  max_servings: "",
+  serving_step: "",
+  units: "",
+  unit_name: "",
 };
 const initialRecipeForm = {
   type: FoodType.Recipe,
@@ -92,12 +103,44 @@ const initialRecipeForm = {
   display_group: "",
   group: "",
   ingredients: [{ item: {} as BasicFood, quantity: 1, usingFoodUnits: false }],
+  instructions: [],
+  cost: "",
+  calories: "",
+  carbs: "",
+  fat: "",
+  protein: "",
+  min_servings: "",
+  max_servings: "",
+  serving_step: "",
+  units: "",
+  unit_name: "",
+};
+
+const initialMealForm = {
+  type: FoodType.Recipe,
+  name: "",
+  enabled: true,
+  required: false,
+  display_group: "",
+  group: "",
+  components: [{ item: {} as BasicFood, quantity: 1, usingFoodUnits: false }],
+  cost: "",
+  calories: "",
+  carbs: "",
+  fat: "",
+  protein: "",
+  min_servings: "",
+  max_servings: "",
+  serving_step: "",
+  units: "",
+  unit_name: "",
 };
 
 export default function FoodsEditor() {
   const [foods, setFoods] = useState<{ [key: string]: FoodItem }>({});
   const [basicForm, setBasicForm] = useState<BasicFood>(initialBasicForm);
   const [recipeForm, setRecipeForm] = useState<Recipe>(initialRecipeForm);
+  const [mealForm, setMealForm] = useState<Meal>(initialMealForm);
   const [instruction, setInstruction] = useState("");
   const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -136,29 +179,59 @@ export default function FoodsEditor() {
     }
   }, [isBarcodeDialogOpen]);
 
-  const updateIngredient = (index: number, field: string, value: any) => {
-    const newForm = { ...recipeForm };
-    newForm.ingredients[index] = {
-      ...newForm.ingredients[index],
-      [field]: value,
-    };
-    setRecipeForm(newForm);
+  const updateIngredient = (
+    index: number,
+    field: string,
+    value: any,
+    type: FoodType
+  ) => {
+    if (type == FoodType.Meal) {
+      const newForm = { ...mealForm };
+      newForm.components[index] = {
+        ...newForm.components[index],
+        [field]: value,
+      };
+      setMealForm(newForm);
+    } else if (type == FoodType.Recipe) {
+      const newForm = { ...recipeForm };
+      newForm.ingredients[index] = {
+        ...newForm.ingredients[index],
+        [field]: value,
+      };
+      setRecipeForm(newForm);
+    }
   };
 
-  const removeIngredient = (index: number) => {
-    console.log(index);
-    const newForm = { ...recipeForm };
-    newForm.ingredients = newForm.ingredients.filter((_, i) => i !== index);
-    setRecipeForm(newForm);
+  const removeIngredient = (index: number, foodType: FoodType) => {
+    if (foodType == FoodType.Recipe) {
+      const newForm = { ...recipeForm };
+      newForm.ingredients = newForm.ingredients.filter((_, i) => i !== index);
+      setRecipeForm(newForm);
+    } else if (foodType == FoodType.Meal) {
+      const newForm = { ...mealForm };
+      console.log(newForm);
+      newForm.components = newForm.components.filter((_, i) => i !== index);
+      setMealForm(newForm);
+      console.log(newForm);
+    }
   };
 
-  const addIngredient = () => {
-    const newForm = { ...recipeForm };
-    newForm.ingredients = [
-      ...newForm.ingredients,
-      { item: {} as BasicFood, quantity: 1, usingFoodUnits: false },
-    ];
-    setRecipeForm(newForm);
+  const addIngredient = (foodType: FoodType) => {
+    if (foodType == FoodType.Recipe) {
+      const newForm = { ...recipeForm };
+      newForm.ingredients = [
+        ...newForm.ingredients,
+        { item: {} as BasicFood, quantity: 1, usingFoodUnits: false },
+      ];
+      setRecipeForm(newForm);
+    } else if (foodType == FoodType.Meal) {
+      const newForm = { ...mealForm };
+      newForm.components = [
+        ...newForm.components,
+        { item: {} as BasicFood, quantity: 1, usingFoodUnits: false },
+      ];
+      setMealForm(newForm);
+    }
   };
 
   const addInstruction = () => {
@@ -260,12 +333,18 @@ export default function FoodsEditor() {
       case FoodType.Recipe: {
         setRecipeForm(food);
         setTab("recipe");
+        console.log(recipeForm);
+        break;
+      }
+      case FoodType.Meal: {
+        setMealForm(food);
+        setTab("meal");
         break;
       }
       case FoodType.Food:
       default: {
         food.type = FoodType.Food;
-        setBasicForm(food as BasicFood);
+        setBasicForm(food);
         setTab("basic");
         break;
       }
@@ -376,15 +455,15 @@ export default function FoodsEditor() {
     return Number(num.toFixed(fractionDigits));
   };
 
-  const calculateNutrition = () => {
-    if (recipeForm) {
-      let totalNutrition = {
-        cost: 0,
-        calories: 0,
-        carbs: 0,
-        fat: 0,
-        protein: 0,
-      };
+  const calculateNutrition = (foodType: FoodType) => {
+    let totalNutrition = {
+      cost: 0,
+      calories: 0,
+      carbs: 0,
+      fat: 0,
+      protein: 0,
+    };
+    if (foodType == FoodType.Recipe && recipeForm) {
       let items = recipeForm.ingredients;
 
       items.forEach((item) => {
@@ -399,10 +478,36 @@ export default function FoodsEditor() {
         totalNutrition.protein += round(item.item.protein * quantity, 1);
       });
 
+      totalNutrition.cost /= recipeForm.makes_servings;
+      totalNutrition.calories /= recipeForm.makes_servings;
+      totalNutrition.carbs /= recipeForm.makes_servings;
+      totalNutrition.fat /= recipeForm.makes_servings;
+      totalNutrition.protein /= recipeForm.makes_servings;
+
       setRecipeForm({
         ...recipeForm,
         ...totalNutrition,
         ingredients: items,
+      });
+    } else if (foodType == FoodType.Meal && mealForm) {
+      let items = mealForm.components;
+
+      items.forEach((item) => {
+        const quantity =
+          item.usingFoodUnits && item.item.units && item.item.unit_name
+            ? item.quantity / item.item.units
+            : item.quantity;
+        totalNutrition.cost += round(item.item.cost * quantity, 1);
+        totalNutrition.calories += round(item.item.calories * quantity, 1);
+        totalNutrition.carbs += round(item.item.carbs * quantity, 1);
+        totalNutrition.fat += round(item.item.fat * quantity, 1);
+        totalNutrition.protein += round(item.item.protein * quantity, 1);
+      });
+
+      setMealForm({
+        ...mealForm,
+        ...totalNutrition,
+        components: items,
       });
     }
   };
@@ -877,12 +982,14 @@ export default function FoodsEditor() {
                     <Label>Ingredients</Label>
                     {recipeForm.ingredients.map((ing, index) => (
                       <div
-                        key={index}
+                        key={`m-${index}-${ing.item.key}-${ing.quantity}-${ing.usingFoodUnits}`}
                         className="flex items-center space-x-2 mt-2"
                       >
                         <Button
                           type="button"
-                          onClick={() => removeIngredient(index)}
+                          onClick={() =>
+                            removeIngredient(index, FoodType.Recipe)
+                          }
                           variant="destructive"
                           size="icon"
                         >
@@ -890,16 +997,24 @@ export default function FoodsEditor() {
                         </Button>
                         <Select
                           onValueChange={(value) =>
-                            updateIngredient(index, "item", foods[value])
+                            updateIngredient(
+                              index,
+                              "item",
+                              foods[value],
+                              FoodType.Recipe
+                            )
                           }
-                          defaultValue={ing.item.key}
+                          value={ing.item ? ing.item.name : ""}
                         >
-                          <SelectTrigger className="w-[180px]">
+                          <SelectTrigger className="grow w-1">
                             <SelectValue placeholder="Select ingredient" />
                           </SelectTrigger>
                           <SelectContent>
                             {Object.entries(foods).map(([id, food]) => (
-                              <SelectItem key={food.key} value={food.name}>
+                              <SelectItem
+                                key={`m-${index}-${food.key}`}
+                                value={food.name}
+                              >
                                 {food.name}
                               </SelectItem>
                             ))}
@@ -907,31 +1022,52 @@ export default function FoodsEditor() {
                         </Select>
                         <Input
                           type="number"
-                          value={ing.quantity}
+                          value={ing.quantity ? ing.quantity : ""}
                           onChange={(e) =>
                             updateIngredient(
                               index,
                               "quantity",
-                              parseFloat(e.target.value)
+                              parseFloat(e.target.value),
+                              FoodType.Recipe
                             )
                           }
                           className="w-20"
                         />
+                        {ing.usingFoodUnits ? (
+                          <div className="text-muted-foreground">
+                            {"/ " + ing.item.units + " " + ing.item.unit_name}
+                          </div>
+                        ) : (
+                          <></>
+                        )}
                         <Label>
                           {" "}
                           <Button
                             type="button"
                             variant="link"
-                            onClick={(e) =>
-                              updateIngredient(index, "usingFoodUnits", false)
-                            }
+                            disabled={!ing.usingFoodUnits}
+                            onClick={(e) => {
+                              updateIngredient(
+                                index,
+                                "usingFoodUnits",
+                                false,
+                                FoodType.Recipe
+                              );
+                              updateIngredient(
+                                index,
+                                "quantity",
+                                ing.quantity / (ing.item.units as number),
+                                FoodType.Recipe
+                              );
+                            }}
                             className={
                               !ing.usingFoodUnits ? "bg-neutral-200" : ""
                             }
                           >
                             Servings
                           </Button>{" "}
-                          {ing.item.units != undefined &&
+                          {ing.item != undefined &&
+                          ing.item.units != undefined &&
                           ing.item.unit_name != undefined ? (
                             <>
                               {" "}
@@ -939,13 +1075,21 @@ export default function FoodsEditor() {
                               <Button
                                 type="button"
                                 variant="link"
-                                onClick={(e) =>
+                                disabled={ing.usingFoodUnits}
+                                onClick={(e) => {
                                   updateIngredient(
                                     index,
                                     "usingFoodUnits",
-                                    true
-                                  )
-                                }
+                                    true,
+                                    FoodType.Recipe
+                                  );
+                                  updateIngredient(
+                                    index,
+                                    "quantity",
+                                    ing.quantity * (ing.item.units as number),
+                                    FoodType.Recipe
+                                  );
+                                }}
                                 className={
                                   ing.usingFoodUnits ? "bg-neutral-200" : ""
                                 }
@@ -961,7 +1105,7 @@ export default function FoodsEditor() {
                     ))}
                     <Button
                       type="button"
-                      onClick={addIngredient}
+                      onClick={() => addIngredient(FoodType.Recipe)}
                       className="mt-2 block"
                     >
                       <Plus className="h-4 w-4 mr-2 inline" /> Add Ingredient
@@ -979,37 +1123,44 @@ export default function FoodsEditor() {
                     <Button type="button" onClick={addInstruction}>
                       <Plus className="h-4 w-4 mr-2" /> Add Instruction
                     </Button>
-                    {recipeForm.instructions.map((inst, index) => (
-                      <div
-                        className="flex space-x-2 space-y-2 items-center justify-between"
-                        key={`instruction-${index}`}
-                      >
-                        <div>
-                          {index + 1}. {inst}
-                        </div>
-                        <Button
-                          type="button"
-                          onClick={() => removeInstruction(index)}
-                          className="w-full md:w-auto"
-                          variant="destructive"
+                    {recipeForm == undefined ? (
+                      <></>
+                    ) : (
+                      (recipeForm.instructions as []).map((inst, index) => (
+                        <div
+                          className="flex space-x-2 space-y-2 items-center justify-between"
+                          key={`instruction-${index}`}
                         >
-                          <Minus className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
+                          <div>
+                            {index + 1}. {inst}
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={() => removeInstruction(index)}
+                            className="w-full md:w-auto"
+                            variant="destructive"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))
+                    )}
                   </div>
 
-                  {/* <div>
-                    <Label htmlFor="servings">Servings</Label>
+                  <div>
+                    <Label htmlFor="makes_servings">
+                      Makes How Many Servings
+                    </Label>
                     <Input
                       type="number"
-                      id="servings"
-                      name="servings"
-                      value={recipeForm.servings}
+                      id="makes_servings"
+                      name="makes_servings"
+                      value={recipeForm.makes_servings}
                       onChange={(e) => handleInputChange(e, setRecipeForm)}
+                      placeholder="0"
                       required
                     />
-                  </div> */}
+                  </div>
 
                   <Separator className="my-4" />
                   {/* All Food Items */}
@@ -1207,7 +1358,7 @@ export default function FoodsEditor() {
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={calculateNutrition}
+                      onClick={(e) => calculateNutrition(FoodType.Recipe)}
                     >
                       Calculate Nutrition & Cost
                     </Button>
@@ -1225,7 +1376,377 @@ export default function FoodsEditor() {
                 <CardTitle>Meal</CardTitle>
                 <CardDescription>Add/Edit Meal</CardDescription>
               </CardHeader>
-              <CardContent></CardContent>
+              <CardContent>
+                <form
+                  onSubmit={(e) => handleSubmit(e, FoodType.Meal)}
+                  className="space-y-4"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="col-span-1 md:col-span-2">
+                      <Label htmlFor="name">Name</Label>
+                      <Input
+                        type="text"
+                        id="name"
+                        name="name"
+                        value={mealForm.name}
+                        onChange={(e) => handleInputChange(e, setMealForm)}
+                        required
+                        placeholder="Hamburger"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>Components</Label>
+                    {mealForm.components.map((ing, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center space-x-2 mt-2"
+                      >
+                        <Button
+                          type="button"
+                          onClick={() => removeIngredient(index, FoodType.Meal)}
+                          variant="destructive"
+                          size="icon"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <Select
+                          onValueChange={(value) =>
+                            updateIngredient(
+                              index,
+                              "item",
+                              foods[value],
+                              FoodType.Meal
+                            )
+                          }
+                          value={ing.item ? ing.item.name : ""}
+                        >
+                          <SelectTrigger className="grow w-1">
+                            <SelectValue placeholder="Select ingredient" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(foods).map(([id, food]) => (
+                              <SelectItem
+                                key={`m-${index}-${food.key}`}
+                                value={food.name}
+                              >
+                                {food.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          value={ing.quantity ? ing.quantity : ""}
+                          onChange={(e) =>
+                            updateIngredient(
+                              index,
+                              "quantity",
+                              parseFloat(e.target.value),
+                              FoodType.Meal
+                            )
+                          }
+                          className="w-20"
+                        />
+                        {ing.usingFoodUnits ? (
+                          <div className="text-muted-foreground">
+                            {"/ " + ing.item.units + " " + ing.item.unit_name}
+                          </div>
+                        ) : (
+                          <></>
+                        )}
+                        <Label>
+                          {" "}
+                          <Button
+                            type="button"
+                            variant="link"
+                            disabled={!ing.usingFoodUnits}
+                            onClick={(e) => {
+                              updateIngredient(
+                                index,
+                                "usingFoodUnits",
+                                false,
+                                FoodType.Meal
+                              );
+                              updateIngredient(
+                                index,
+                                "quantity",
+                                ing.quantity / (ing.item.units as number),
+                                FoodType.Meal
+                              );
+                            }}
+                            className={
+                              !ing.usingFoodUnits ? "bg-neutral-200" : ""
+                            }
+                          >
+                            Servings
+                          </Button>{" "}
+                          {ing.item != undefined &&
+                          ing.item.units != undefined &&
+                          ing.item.unit_name != undefined ? (
+                            <>
+                              {" "}
+                              or{" "}
+                              <Button
+                                type="button"
+                                variant="link"
+                                disabled={ing.usingFoodUnits}
+                                onClick={(e) => {
+                                  updateIngredient(
+                                    index,
+                                    "usingFoodUnits",
+                                    true,
+                                    FoodType.Meal
+                                  );
+                                  updateIngredient(
+                                    index,
+                                    "quantity",
+                                    ing.quantity * (ing.item.units as number),
+                                    FoodType.Meal
+                                  );
+                                }}
+                                className={
+                                  ing.usingFoodUnits ? "bg-neutral-200" : ""
+                                }
+                              >
+                                {ing.item.unit_name}
+                              </Button>
+                            </>
+                          ) : (
+                            <></>
+                          )}
+                        </Label>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      onClick={() => addIngredient(FoodType.Meal)}
+                      className="mt-2 block"
+                    >
+                      <Plus className="h-4 w-4 mr-2 inline" /> Add Component
+                    </Button>
+                  </div>
+
+                  {/* <div>
+                    <Label htmlFor="servings">Servings</Label>
+                    <Input
+                      type="number"
+                      id="servings"
+                      name="servings"
+                      value={mealForm.servings}
+                      onChange={(e) => handleInputChange(e, setMealForm)}
+                      required
+                    />
+                  </div> */}
+
+                  <Separator className="my-4" />
+                  {/* All Food Items */}
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="min_serving">Min Servings</Label>
+                      <Input
+                        type="number"
+                        id="min_serving"
+                        name="min_serving"
+                        value={mealForm.min_serving}
+                        onChange={(e) => handleInputChange(e, setMealForm)}
+                        min="0.5"
+                        step="0.5"
+                        placeholder="1"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="max_serving">Max Servings</Label>
+                      <Input
+                        type="number"
+                        id="max_serving"
+                        name="max_serving"
+                        value={mealForm.max_serving}
+                        onChange={(e) => handleInputChange(e, setMealForm)}
+                        min="0.5"
+                        step="0.5"
+                        placeholder="1"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="serving_step">Serving Step</Label>
+                      <Input
+                        type="number"
+                        id="serving_step"
+                        name="serving_step"
+                        value={mealForm.serving_step}
+                        onChange={(e) => handleInputChange(e, setMealForm)}
+                        min="0.5"
+                        step="0.5"
+                        placeholder="0.5"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="group">Group</Label>
+                      <Input
+                        type="text"
+                        id="group"
+                        name="group"
+                        value={mealForm.group}
+                        onChange={(e) => handleInputChange(e, setMealForm)}
+                        placeholder="proteinBar"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="display_group">Display Group</Label>
+                      <Input
+                        type="text"
+                        id="display_group"
+                        name="display_group"
+                        value={mealForm.display_group}
+                        onChange={(e) => handleInputChange(e, setMealForm)}
+                        placeholder="Dinner"
+                        list="display-groups"
+                        className="mt-1"
+                      />
+                      <datalist id="display-groups">
+                        <option value="Breakfast" />
+                        <option value="Lunch" />
+                        <option value="Dinner" />
+                        <option value="Morning snack" />
+                        <option value="Afternoon snack" />
+                        <option value="Evening snack" />
+                      </datalist>
+                    </div>
+                    <div className="flex items-center space-x-4 mt-6 justify-evenly">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="required"
+                          name="required"
+                          checked={mealForm.required}
+                          onCheckedChange={(checked) =>
+                            setMealForm((prev) => ({
+                              ...prev,
+                              required: checked as boolean,
+                            }))
+                          }
+                        />
+                        <Label htmlFor="required">Required</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="enabled"
+                          name="enabled"
+                          checked={mealForm.enabled}
+                          onCheckedChange={(checked) =>
+                            setMealForm((prev) => ({
+                              ...prev,
+                              enabled: checked as boolean,
+                            }))
+                          }
+                        />
+                        <Label htmlFor="enabled">Enabled</Label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* GENERATED ITEMS */}
+
+                  <Separator className="my-4" />
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div>
+                      <Label htmlFor="calories">Calories</Label>
+                      <Input
+                        type="number"
+                        id="calories"
+                        name="calories"
+                        value={mealForm.calories}
+                        onChange={(e) => handleInputChange(e, setMealForm)}
+                        required
+                        min="0"
+                        placeholder="0"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="carbs">Carbs (g)</Label>
+                      <Input
+                        type="number"
+                        id="carbs"
+                        name="carbs"
+                        value={mealForm.carbs}
+                        onChange={(e) => handleInputChange(e, setMealForm)}
+                        required
+                        min="0"
+                        step="0.1"
+                        placeholder="0"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="fat">Fat (g)</Label>
+                      <Input
+                        type="number"
+                        id="fat"
+                        name="fat"
+                        value={mealForm.fat}
+                        onChange={(e) => handleInputChange(e, setMealForm)}
+                        required
+                        min="0"
+                        step="0.1"
+                        placeholder="0"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="protein">Protein (g)</Label>
+                      <Input
+                        type="number"
+                        id="protein"
+                        name="protein"
+                        value={mealForm.protein}
+                        onChange={(e) => handleInputChange(e, setMealForm)}
+                        required
+                        min="0"
+                        step="0.1"
+                        placeholder="0"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="cost">Cost ($)</Label>
+                      <Input
+                        type="number"
+                        id="cost"
+                        name="cost"
+                        value={mealForm.cost}
+                        onChange={(e) => handleInputChange(e, setMealForm)}
+                        required
+                        step="0.01"
+                        placeholder="1.99"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={(e) => calculateNutrition(FoodType.Meal)}
+                    >
+                      Calculate Nutrition & Cost
+                    </Button>
+                    <Button type="submit" className="w-full md:w-auto">
+                      Add/Update Recipe
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
             </Card>
           </TabsContent>
         </Tabs>

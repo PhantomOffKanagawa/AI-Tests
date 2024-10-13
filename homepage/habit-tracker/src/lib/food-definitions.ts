@@ -57,13 +57,13 @@ export interface BasicFood extends LocalGeneratable {
 
 export interface Recipe extends LocalGeneratable {
   type: FoodType.Recipe;
+  makes_servings: number;
   ingredients: Array<{
     item: BasicFood | Recipe;
     quantity: number;
     usingFoodUnits: boolean;
   }>;
-  instructions: string[];
-  //   servings: number; // How many it makes
+  instructions?: string[];
 }
 
 export interface Meal extends LocalGeneratable {
@@ -71,6 +71,7 @@ export interface Meal extends LocalGeneratable {
   components: Array<{
     item: BasicFood | Recipe | Meal;
     quantity: number;
+    usingFoodUnits: boolean;
   }>;
 }
 
@@ -108,6 +109,7 @@ export function createRecipe(initialValues: Partial<Recipe> = {}): Recipe {
     serving_step: 1,
     enabled: true,
     required: false,
+    makes_servings: 1,
     ingredients: [],
     instructions: [],
     ...initialValues, // Merge the initial values with defaults
