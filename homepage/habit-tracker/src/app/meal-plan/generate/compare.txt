@@ -1,0 +1,911 @@
+"use client";
+
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  ReactElement,
+} from "react";
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  DropResult,
+} from "@hello-pangea/dnd";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Plus,
+  Minus,
+  X,
+  RotateCcw,
+  Copy,
+  Utensils,
+  Lock,
+  Heart,
+  Computer,
+  Search,
+  ChevronUp,
+  ChevronDown,
+  Equal,
+  ChevronsUpDown,
+  Pizza,
+  Ruler,
+} from "lucide-react";
+import Layout from "@/components/Layout";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  GenerateType,
+  MealReason,
+  FoodItem,
+  GeneratorList,
+  Range,
+  GoalOptions,
+  GoalRanges,
+} from "@/lib/food-definitions";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+export default function MealPlanGenerator() {
+  const [foods, setFoods] = useState<{ [key: string]: FoodItem }>({});
+  const [ranges, setRanges] = useState<GoalRanges>({
+    Calories: { min: 1700, max: 1800, total: 0 },
+    Fat: { min: 30, max: 55, total: 0 },
+    Carbs: { min: 120, max: 200, total: 0 },
+    Protein: { min: 190, max: 210, total: 0 },
+  });
+  const [meals, setMeals] = useState<GeneratorList[]>([
+    { id: 1, name: "Breakfast", items: [] },
+    { id: 3, name: "Lunch", items: [] },
+    { id: 5, name: "Dinner", items: [] },
+    { id: 5, name: "Snacks", items: [] },
+  ]);
+  const [price, setPrice] = useState(0);
+
+  // Handle search states
+  const [activeMealSearch, setActiveMealSearch] = useState<number | null>(null);
+  const [allFoodsSearchTerm, setAllFoodsSearchTerm] = useState("");
+  const [showAllFoodsSearch, setShowAllFoodsSearch] = useState(false);
+
+  // Track Command Selects
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const allFoodsSearchInputRef = useRef<HTMLInputElement>(null);
+
+  // Keep State For Multiple Days
+  const [selectedDay, setSelectedDay] = useState<number>(0);
+  const [weekPlan, setWeekPlan] = useState<GeneratorList[][]>(Array(7).fill([]));
+  const [weekRanges, setWeekRanges] = useState<GoalRanges[]>(Array(7).fill(ranges));
+
+  enum foodDisplayType {
+    AllFood = "all-food",
+    RequiredFood = "required-food",
+    DisabledFood = "disabled-food",
+    InGeneratedList = "generated-list-food",
+  }
+
+  useEffect(() => {
+    const storedFoods = localStorage.getItem("foods");
+    const storedRanges = localStorage.getItem("ranges");
+
+    let foodsWithIds: { [key: string]: any } = {};
+    if (storedFoods) {
+      foodsWithIds = JSON.parse(storedFoods);
+      // Convert the names to safe draggable IDs
+
+      for (let key in foodsWithIds) {
+        foodsWithIds[key].name = key;
+        foodsWithIds[key].inMeal = false;
+        foodsWithIds[key].generateType = GenerateType.AnyWithinBounds;
+
+        // const draggableId = foodName.replace(/\s+/g, "_");
+        const draggableId = encodeURIComponent(key);
+
+        foodsWithIds[key].key = draggableId;
+        foodsWithIds[key].draggable_id = draggableId;
+      }
+    }
+
+    // if (storedFoods) setFoods(JSON.parse(storedFoods));
+    if (storedFoods) setFoods(foodsWithIds);
+    if (storedRanges) setRanges(JSON.parse(storedRanges));
+  }, []);
+
+  useEffect(() => {
+    updateRanges();
+  }, [meals]);
+
+  useEffect(() => {
+    if (activeMealSearch !== null && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [activeMealSearch]);
+
+  useEffect(() => {
+    if (showAllFoodsSearch && allFoodsSearchInputRef.current) {
+      allFoodsSearchInputRef.current.focus();
+    }
+  }, [showAllFoodsSearch]);
+
+  useEffect(() => {
+    setMeals(weekPlan[selectedDay]);
+  }, [selectedDay, weekPlan]);
+
+
+  const restrictToNumbers = (event: KeyboardEvent) => {
+    // Allow control keys like backspace, delete, arrow keys
+    const allowedKeys = [
+      "Backspace",
+      "Delete",
+      "ArrowLeft",
+      "ArrowRight",
+      "ArrowUp",
+      "ArrowDown",
+      "Tab",
+    ];
+
+    // Allow numeric keys and period for decimals
+    const isNumber =
+      (event.key >= "0" && event.key <= "9") || event.key === ".";
+
+    // If the key pressed is not a number and not allowed control keys, prevent it
+    if (!isNumber && !allowedKeys.includes(event.key)) {
+      event.preventDefault();
+    }
+  };
+
+  const clearMeals = () => {
+    const newMeals = [
+      { id: 1, name: "Breakfast", items: [] },
+      { id: 3, name: "Lunch", items: [] },
+      { id: 5, name: "Dinner", items: [] },
+      { id: 7, name: "Snacks", items: [] },
+    ];
+
+    const newFoods = { ...foods };
+    for (const key in newFoods) {
+      newFoods[key].inMeal = false;
+      newFoods[key].servings = newFoods[key].min_serving;
+    }
+
+    setMeals(newMeals);
+    setFoods(newFoods);
+    updateDayPlan(selectedDay, newMeals);
+    updateDayRanges(selectedDay, { ...ranges, Calories: { ...ranges.Calories, total: 0 }, Fat: { ...ranges.Fat, total: 0 }, Carbs: { ...ranges.Carbs, total: 0 }, Protein: { ...ranges.Protein, total: 0 } });
+  };
+
+  // ! Will break if allow drag multiple instances of food
+  const updateServings = (e: any, meal: GeneratorList, food: FoodItem) => {
+    const newWeekPlan = [...weekPlan];
+    const dayMeals = newWeekPlan[selectedDay];
+    const mealIndex = dayMeals.findIndex((m) => m.id === meal.id);
+    const itemIndex = dayMeals[mealIndex].items.findIndex((i) => i.name === food.name);
+
+    if (e.target.value) {
+      dayMeals[mealIndex].items[itemIndex].servings = parseFloat(parseFloat(e.target.value).toFixed(2));
+    } else {
+      delete dayMeals[mealIndex].items[itemIndex].servings;
+    }
+    dayMeals[mealIndex].items[itemIndex].mealReason = MealReason.Manual;
+
+    const newFoods = { ...foods };
+    newFoods[food.name].servings = e.target.value;
+    newFoods[food.name].mealReason = MealReason.Manual;
+
+    setWeekPlan(newWeekPlan);
+    setFoods(newFoods);
+    setMeals(dayMeals);
+  };
+
+  const updateMinMaxServings = (
+    e: any,
+    meal: GeneratorList,
+    food: FoodItem,
+    max: boolean
+  ) => {
+    const newMeals = [...meals];
+    const newFoods = { ...foods };
+
+    const mealIndex = newMeals.findIndex((m) => m.id === meal.id);
+    const itemIndex = newMeals[mealIndex].items.findIndex(
+      (i) => i.name === food.name
+    );
+
+    if (max) {
+      const newServings: number = e.target.textContent
+        ? parseFloat(parseFloat(e.target.textContent).toFixed(2))
+        : 0;
+      newMeals[mealIndex].items[itemIndex].max_serving = newServings;
+      newFoods[food.name].max_serving = newServings;
+    } else {
+      const newServings: number = e.target.textContent
+        ? parseFloat(parseFloat(e.target.textContent).toFixed(2))
+        : 0;
+      newMeals[mealIndex].items[itemIndex].min_serving = newServings;
+      newFoods[food.name].min_serving = newServings;
+    }
+
+    setMeals(newMeals);
+    setFoods(newFoods);
+  };
+
+  const updateRanges = useCallback(() => {
+    const newRanges = { ...ranges };
+    let totalCalories = 0;
+    let totalProtein = 0;
+    let totalCarbs = 0;
+    let totalFat = 0;
+    let totalPrice = 0;
+
+    meals.forEach((meal) => {
+      meal.items.forEach((item) => {
+        if (item.servings) {
+
+        const quantity =
+          item.usingFoodUnits && item.units && item.unit_name
+            ? item.servings / item.units
+            : item.servings;
+
+        totalCalories += item.calories * quantity;
+        totalProtein += item.protein * quantity;
+        totalCarbs += item.carbs * quantity;
+        totalFat += item.fat * quantity;
+        totalPrice += item.cost * quantity;
+        }
+      });
+    });
+
+    newRanges.Calories.total = totalCalories;
+    newRanges.Protein.total = totalProtein;
+    newRanges.Carbs.total = totalCarbs;
+    newRanges.Fat.total = totalFat;
+    setRanges(newRanges);
+    setPrice(totalPrice);
+  }, [meals, ranges]);
+
+  const generateFoodItem = (
+    foodItem: FoodItem,
+    type: foodDisplayType,
+    meal?: GeneratorList,
+    provided?: any
+  ) => {
+    switch (type) {
+      case foodDisplayType.AllFood: {
+        return (
+          <div
+            ref={provided.innerRef}
+            {...provided.draggableProps}
+            {...provided.dragHandleProps}
+            className="bg-secondary p-3 rounded-md"
+          >
+            <div className="flex justify-between items-center">
+              <span>
+                {getIcon(foodItem)}
+                {foodItem.name}
+              </span>
+              <div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => toggleRequired(foodItem)}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => disableFood(foodItem)}
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="text-sm text-muted-foreground mt-1">
+              Calories: {foodItem.calories}, Carbs: {foodItem.carbs}g, Protein:{" "}
+              {foodItem.protein}g, Fat: {foodItem.fat}g
+            </div>
+          </div>
+        );
+      }
+    }
+  };
+
+  const onDragEnd = (result: DropResult) => {
+    // const { source, destination, draggableId } = result;
+    const { source, destination } = result;
+
+    // console.log(result);
+
+    if (!destination) {
+      return;
+    }
+
+    // Get source & destination IDs
+    const sourceId = source.droppableId;
+    const destId = destination.droppableId;
+
+    // Keep local edited copies of foods and meals
+    const newFoods = { ...foods };
+    const newMeals = [...meals];
+
+    // Function to get food item from a given droppable
+    const getFood = (id: string, index: number): FoodItem => {
+      if (id === "required-foods") {
+        const filteredFoods: FoodItem[] = requiredFoods;
+        return filteredFoods[index]; // Use filtered array and index properly
+      } else if (id === "all-foods") {
+        const filteredFoods: FoodItem[] = filteredAllFoods;
+        return filteredFoods[index]; // Use filtered array and index properly
+      } else if (id === "disabled-foods") {
+        const filteredFoods: FoodItem[] = disabledFoods;
+        return filteredFoods[index]; // Use filtered array and index properly
+      }
+      const meal = meals.find((m) => m.id === parseInt(id));
+      return meal ? meal.items[index] : Object.values(foods)[0];
+    };
+
+    // Get the foodItem from the droppable
+    const foodItem = getFood(sourceId, source.index);
+    // const foodItem = foods[decodeURIComponent(draggableId)]
+
+    // Update food properties based on destination
+    // If not dropping into a meal
+    const destMealIndex = newMeals.findIndex((m) => m.id === parseInt(destId));
+    const sourceMealIndex = newMeals.findIndex(
+      (m) => m.id === parseInt(sourceId)
+    );
+    if (destMealIndex === -1) {
+      newFoods[foodItem.name].inMeal = false;
+
+      if (destId === "required-foods") {
+        newFoods[foodItem.name].required = true;
+        newFoods[foodItem.name].enabled = true;
+      } else if (destId === "all-foods") {
+        newFoods[foodItem.name].required = false;
+        newFoods[foodItem.name].enabled = true;
+      } else if (destId === "disabled-foods") {
+        newFoods[foodItem.name].enabled = false;
+      }
+    } else {
+      // Dropped into a meal
+      newFoods[foodItem.name].meal_display_group = newMeals[destMealIndex].name;
+      newFoods[foodItem.name].mealReason = MealReason.Manual;
+      foodItem.mealReason = MealReason.Manual;
+      if (sourceMealIndex == -1)
+        // If source was not a meal
+        newFoods[foodItem.name].servings = foodItem.min_serving;
+      // newFoods[foodItem.name].mealReason = MealReason.Manual;
+      if (sourceId === destId) {
+        // If dragging within the same meal, rearrange the item
+        const currentItems = newMeals[destMealIndex].items;
+        const movedItem = currentItems[source.index]; // Get the item being dragged
+        currentItems.splice(source.index, 1); // Remove it from the original position
+        currentItems.splice(destination.index, 0, movedItem); // Insert it into the new position
+        // newFoods[foodItem.name].inMeal = true;
+      } else {
+        // If dragging to a different meal
+        const newFood = { ...foodItem, inMeal: true };
+        newMeals[destMealIndex].items.splice(destination.index, 0, newFood);
+        newFoods[foodItem.name].inMeal = true;
+      }
+    }
+
+    // Remove from source if it's from a meal and not the same meal
+    if (sourceMealIndex !== -1 && sourceId != destId) {
+      newMeals[sourceMealIndex].items.splice(source.index, 1);
+    }
+
+    setFoods(newFoods);
+    setMeals(newMeals);
+  };
+
+  const setUsingFoodUnits = (item: FoodItem, meal: GeneratorList) => {
+    setGenerateType(
+      item,
+      meal,
+      GenerateType.KeepEqual
+    );
+
+    const newMeals = [...meals];
+    const newFoods = { ...foods };
+
+    const mealIndex = newMeals.findIndex((m) => m.id === meal.id);
+    const itemIndex = newMeals[mealIndex].items.findIndex(
+      (i) => i.name === item.name
+    );
+
+    const servings = (newFoods[item.name].servings) ? newFoods[item.name].servings : 0;
+    const convertedServings = (!newFoods[item.name].usingFoodUnits) ? (newFoods[item.name].units as number) * (servings as number) : (servings as number) / (newFoods[item.name].units as number);
+    const usingFoodUnits = newFoods[item.name].usingFoodUnits ? false : true;
+
+    newMeals[mealIndex].items[itemIndex].servings = convertedServings;
+    newMeals[mealIndex].items[itemIndex].usingFoodUnits = usingFoodUnits;
+    newMeals[mealIndex].items[itemIndex].mealReason = MealReason.Manual;
+
+    newFoods[item.name].servings = convertedServings;
+    newFoods[item.name].usingFoodUnits = usingFoodUnits;
+    newFoods[item.name].mealReason = MealReason.Manual;
+
+    setMeals(newMeals);
+    setFoods(newFoods);
+  };
+
+  const setGenerateType = (
+    item: FoodItem,
+    meal: GeneratorList,
+    type: GenerateType
+  ) => {
+    const newMeals = [...meals];
+    const newFoods = { ...foods };
+
+    const mealIndex = newMeals.findIndex((m) => m.id === meal.id);
+    const itemIndex = newMeals[mealIndex].items.findIndex(
+      (i) => i.name === item.name
+    );
+
+    newMeals[mealIndex].items[itemIndex].generateType = type;
+    newMeals[mealIndex].items[itemIndex].mealReason = MealReason.Manual;
+
+    newFoods[item.name].generateType = type;
+    newFoods[item.name].mealReason = MealReason.Manual;
+
+    setMeals(newMeals);
+    setFoods(newFoods);
+  };
+
+  const removeFromMeal = (item: FoodItem, meal: GeneratorList) => {
+    const newMeals = meals.map((m) => {
+      if (m.id === meal.id) {
+        return { ...m, items: m.items.filter((i) => i.name !== item.name) };
+      }
+      return m;
+    });
+    const newFoods = { ...foods };
+    newFoods[item.name].inMeal = false;
+    setMeals(newMeals);
+    setFoods(newFoods);
+  };
+
+  const disableFood = (item: FoodItem, meal?: GeneratorList) => {
+    if (meal) {
+      removeFromMeal(item, meal);
+    }
+    const newFoods = { ...foods };
+    newFoods[item.name].enabled = false;
+    newFoods[item.name].inMeal = false;
+    setFoods(newFoods);
+  };
+
+  const enabledFoods = Object.values(foods)
+    .filter((food) => food.enabled && !food.required && !food.inMeal)
+    .sort((foodA, foodB) => foodA.name.localeCompare(foodB.name));
+
+  const disabledFoods = Object.values(foods)
+    .filter((food) => !food.enabled && !food.inMeal)
+    .sort((foodA, foodB) => foodA.name.localeCompare(foodB.name));
+  const requiredFoods = Object.values(foods)
+    .filter((food) => food.enabled && food.required && !food.inMeal)
+    .sort((foodA, foodB) => foodA.name.localeCompare(foodB.name));
+
+  const toggleRequired = (item: FoodItem) => {
+    const newFoods = { ...foods };
+    newFoods[item.name].required = !newFoods[item.name].required;
+    setFoods(newFoods);
+  };
+
+  const enableFood = (item: FoodItem) => {
+    const newFoods = { ...foods };
+    newFoods[item.name].enabled = true;
+    setFoods(newFoods);
+  };
+
+  const updateTarget = (
+    nutrient: GoalOptions,
+    event: React.FocusEvent<HTMLSpanElement>,
+    key: "min" | "max"
+  ) => {
+    const newTarget = parseFloat(event.target.textContent ?? "0");
+    if (!isNaN(newTarget)) {
+      const newRanges = { ...ranges };
+      if (key === "min" && newTarget > newRanges[nutrient].max) {
+        newRanges[nutrient][key] = newRanges[nutrient].max;
+      } else if (key === "max" && newTarget < newRanges[nutrient].min) {
+        newRanges[nutrient][key] = newRanges[nutrient].min;
+      } else {
+        newRanges[nutrient][key] = newTarget;
+      }
+      setRanges(newRanges);
+      updateRanges();
+    }
+  };
+
+  const getSegments = (quota: Range) => {
+    const segments = [];
+    if (quota.total > quota.min)
+      segments.push({
+        value: (Math.min(quota.total, quota.max) / quota.max) * 100,
+        color: quota.total < quota.max ? "bg-green-500" : "bg-red-500",
+      });
+    segments.push({
+      value: Math.min(
+        (Math.min(quota.min, quota.total) / quota.max) * 100,
+        100
+      ),
+      // color: (quota.total < quota.min) ? 'bg-yellow-500' : 'bg-neutral-500'
+      color: "bg-yellow-500",
+    });
+    return segments;
+  };
+
+  const addElement = (
+    originalElement: ReactElement,
+    newElement: ReactElement
+  ) => {
+    return (
+      <>
+        {originalElement}
+        {newElement}
+      </>
+    );
+  };
+
+  const getIcon = (food: FoodItem) => {
+    let icon = <></>;
+
+    if (!food.enabled) {
+      icon = <Lock className="h-4 w-4 inline me-2" />;
+    } else if (food.required) {
+      icon = <Heart className="h-4 w-4 inline me-2" />;
+    }
+
+    if (food.inMeal && food.mealReason == MealReason.Generated) {
+      icon = addElement(<Computer className="h-4 w-4 inline me-2" />, icon);
+    }
+
+    // if (food.inMeal) {
+    //   icon = addElement(<Salad className="h-4 w-4 inline me-2" />, icon);
+    // }
+
+    // if (food.mealReason == MealReason.Manual) {
+    //   icon = addElement(<Hand className="h-4 w-4 inline me-2" />, icon);
+    // }
+
+    return icon;
+  };
+
+  const preprocessFoodsByGroup = (
+    foods: { [key: string]: FoodItem },
+    heuristic: (a: FoodItem, b: FoodItem) => boolean
+  ) => {
+    let selectedFoods: { [key: string]: FoodItem } = {};
+    const groupFoods: { [key: string]: FoodItem[] } = {};
+
+    for (const [food, food_data] of Object.entries(foods)) {
+      if (!food_data.enabled && !food_data.inMeal) continue;
+
+      const group = food_data.group;
+      // If no group, add by default
+      if (group === "") {
+        selectedFoods[food] = food_data;
+        continue;
+      }
+
+      // Add group if not already there
+      if (!groupFoods[group]) {
+        groupFoods[group] = [];
+      }
+      groupFoods[group].push({ ...food_data, name: food });
+    }
+
+    for (const [, foodsInGroup] of Object.entries(groupFoods)) {
+      let bestFood = foodsInGroup[0];
+      let wasFoodInMeal = false;
+
+      // Add all foods added by user
+      // If there isn't a food added by user then choose best by heuristic
+      for (const foodData of foodsInGroup) {
+        if (foodData.inMeal) {
+          console.log(`${foodData.name} was inMeal`);
+          wasFoodInMeal = true;
+          selectedFoods[foodData.name] = foodData;
+        } else if (heuristic(foodData, bestFood)) {
+          bestFood = foodData;
+        }
+      }
+
+      console.log(`${bestFood.name} was best food and added ${!wasFoodInMeal}`);
+      if (!wasFoodInMeal) selectedFoods[bestFood.name] = bestFood;
+    }
+
+    return selectedFoods;
+  };
+
+  const lowestProteinCostHeuristic = (
+    currentFood: FoodItem,
+    bestFood: FoodItem
+  ) => {
+    return (
+      currentFood.protein / currentFood.cost > bestFood.protein / bestFood.cost
+    );
+  };
+
+  const solveMealPlan = (foods: { [key: string]: FoodItem }) => {
+    let problem: {
+      optimize: string;
+      opType: string;
+      constraints: {
+        [key: string]: { min?: number; max?: number; equal?: number };
+      };
+      variables: any;
+      ints: any;
+    } = {
+      optimize: "cost",
+      opType: "min",
+      constraints: {
+        calories: {
+          min: ranges.Calories.min,
+          max: ranges.Calories.max,
+        },
+        fat: {
+          min: ranges.Fat.min,
+          max: ranges.Fat.max,
+        },
+        carbs: {
+          min: ranges.Carbs.min,
+          max: ranges.Carbs.max,
+        },
+        protein: {
+          min: ranges.Protein.min,
+          max: ranges.Protein.max,
+        },
+      },
+      variables: {},
+      ints: {},
+    };
+
+    const selectedFoods = preprocessFoodsByGroup(
+      foods,
+      lowestProteinCostHeuristic
+    );
+
+    const display_groups = [
+      "Morning snack",
+      "Breakfast",
+      "Afternoon snack",
+      "Lunch",
+      "Evening snack",
+      "Dinner",
+    ];
+
+    for (const [food, food_data] of Object.entries(selectedFoods)) {
+      // if (!food_data.enabled && !food_data.inMeal) continue; // Handeled in Preprocess
+
+      const inMeal = meals.some((meal) =>
+        meal.items.some((data) => data.name === food)
+      );
+
+      problem.variables[food] = {
+        calories: food_data.calories * food_data.serving_step,
+        fat: food_data.fat * food_data.serving_step,
+        carbs: food_data.carbs * food_data.serving_step,
+        protein: food_data.protein * food_data.serving_step,
+        cost: food_data.cost * food_data.serving_step,
+      };
+
+      problem.variables[food][food] = food_data.serving_step;
+
+      const min_serving = food_data.required ? food_data.min_serving : 0;
+      const max_serving = food_data.max_serving;
+
+      if (!inMeal) {
+        problem.constraints[food] = {
+          min: min_serving,
+          max: max_serving,
+        };
+      } else {
+        switch (food_data.generateType) {
+          case GenerateType.KeepEqual: {
+            if (!food_data.servings) break;
+            const quantity =
+            food_data.usingFoodUnits && food_data.units && food_data.unit_name
+              ? food_data.servings / food_data.units
+              : food_data.servings;
+
+            problem.constraints[food] = {
+              equal: quantity,
+            };
+            break;
+          }
+          case GenerateType.AnyWithinBounds: {
+            problem.constraints[food] = {
+              min: min_serving,
+              max: max_serving,
+            };
+            break;
+          }
+          case GenerateType.OnlyIncrease: {
+            problem.constraints[food] = {
+              min: food_data.servings,
+              max: max_serving,
+            };
+            break;
+          }
+          case GenerateType.OnlyDecrease: {
+            problem.constraints[food] = {
+              min: min_serving,
+              max: food_data.servings,
+            };
+            break;
+          }
+        }
+      }
+      problem.ints[`${food}`] = 1;
+
+      if (
+        food_data.inMeal &&
+        !display_groups.includes(food_data.meal_display_group)
+      )
+        display_groups.push(food_data.meal_display_group);
+      else if (
+        food_data.display_group &&
+        !display_groups.includes(food_data.display_group)
+      ) {
+        display_groups.push(food_data.display_group);
+      }
+    }
+
+    const solution = solver.Solve(problem); // Can't find a way to fix as the library can't be imported to react, different lib?
+    console.log(problem);
+    console.log(solution);
+
+    displayMealPlan(solution, foods);
+  };
+
+  const displayMealPlan = (
+    solution: any,
+    foods: { [key: string]: FoodItem }
+  ) => {
+    const newMeals = meals.map((meal) => ({ ...meal, items: [] }));
+    const newFoods = { ...foods };
+
+    if (!solution.feasible) {
+      console.log("No solution was found, displaying best idea");
+      alert("No solution was found, displaying best idea");
+      return;
+    }
+
+    const predefinedGroupOrder = [
+      "Breakfast",
+      "Lunch",
+      "Dinner",
+      "Snack",
+    ];
+
+    const foodsByGroup: { [key: string]: FoodItem[] } = {};
+
+    const sortedFoods = Object.entries(foods).sort(([foodA], [foodB]) =>
+      foodA.localeCompare(foodB)
+    );
+
+    for (const [food, foodData] of sortedFoods) {
+      const servings = solution[food] * foodData.serving_step;
+      if (servings && servings !== 0) {
+        const group =
+          foodData.mealReason == MealReason.Manual
+            ? foodData.meal_display_group
+            : foodData.display_group || "Ungrouped";
+
+        if (!foodsByGroup[group]) {
+          foodsByGroup[group] = [];
+        }
+
+        const mealReason =
+          !("mealReason" in newFoods[food]) ||
+          newFoods[food].mealReason != MealReason.Manual
+            ? MealReason.Generated
+            : newFoods[food].mealReason;
+
+        foodsByGroup[group].push({
+          ...foodData,
+          name: food,
+          servings: parseFloat(servings.toFixed(2)),
+          inMeal: true,
+          mealReason: mealReason,
+        });
+
+        newFoods[food].servings = parseFloat(servings.toFixed(2));
+        newFoods[food].inMeal = true;
+        newFoods[food].mealReason = mealReason;
+        newFoods[food].meal_display_group = group;
+      } else {
+        newFoods[food].inMeal = false;
+      }
+    }
+
+    const remainingGroups = Object.keys(foodsByGroup)
+      .filter((group) => !predefinedGroupOrder.includes(group))
+      .sort((a, b) => a.localeCompare(b));
+
+    const groupOrder = [
+      ...predefinedGroupOrder,
+      ...remainingGroups,
+      "Ungrouped",
+    ];
+
+    groupOrder.forEach((group) => {
+      if (!foodsByGroup[group]) return;
+
+      let meal = newMeals.find((meal) => meal.name === group);
+      if (!meal) {
+        meal = {
+          // ! Figure out this bs
+          id: newMeals.length + 10,
+          name: group,
+          items: [],
+        };
+        newMeals.push(meal);
+      }
+
+      console.log(`Meal: ${meal.name} is id: ${meal.id}`);
+      meal.items = [];
+      foodsByGroup[group].forEach((food) => {
+        if (!meal.items.some((item: FoodItem) => item.name === food.name)) {
+          meal.items.push(food as never); // Lol how does this work
+        }
+      });
+    });
+
+    setMeals(newMeals);
+    setFoods(newFoods);
+    console.log(foods);
+    return newMeals;
+  };
+
+  const calculateRanges = (meals: GeneratorList[]) => {
+    const newRanges = { ...ranges };
+    let totalCalories = 0;
+    let totalProtein = 0;
+    let totalCarbs = 0;
+    let totalFat = 0;
+    let totalPrice = 0;
+
+    meals.forEach((meal) => {
+      meal.items.forEach((item) => {
+        if (item.servings) {
+          const quantity =
+            item.usingFoodUnits && item.units && item.unit_name
+              ? item.servings / item.units
+              : item.servings;
+
+          totalCalories += item.calories * quantity;
+          totalProtein += item.protein * quantity;
+          totalCarbs += item.carbs * quantity;
+          totalFat += item.fat * quantity;
+          totalPrice += item.cost * quantity;
+        }
+      });
+    });
+
+    newRanges.Calories.total = totalCalories;
+    newRanges.Protein.total = totalProtein;
+    newRanges.Carbs.total = totalCarbs;
+    newRanges.Fat.total = totalFat;
+    return newRanges;
+  };
+
+  const startSolve = () => {
