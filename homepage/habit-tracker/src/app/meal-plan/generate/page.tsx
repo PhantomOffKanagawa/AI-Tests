@@ -59,6 +59,12 @@ import {
   GoalOptions,
   GoalRanges,
 } from "@/lib/food-definitions";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Label } from "@/components/ui/label";
 
 export default function MealPlanGenerator() {
   const [foods, setFoods] = useState<{ [key: string]: FoodItem }>({});
@@ -70,16 +76,30 @@ export default function MealPlanGenerator() {
   });
   const [meals, setMeals] = useState<GeneratorList[]>([
     { id: 1, name: "Breakfast", items: [] },
-    { id: 3, name: "Lunch", items: [] },
-    { id: 5, name: "Dinner", items: [] },
-    { id: 5, name: "Snacks", items: [] },
+    { id: 2, name: "Lunch", items: [] },
+    { id: 3, name: "Dinner", items: [] },
+    { id: 4, name: "Snacks", items: [] },
   ]);
   const [price, setPrice] = useState(0);
+
+  type alreadyEatenRanges = {
+    [key in GoalOptions]: number;
+  };
+
+  const [alreadyEaten, setAlreadyEaten] = useState<alreadyEatenRanges>({
+    Calories: 0,
+    Fat: 0,
+    Carbs: 0,
+    Protein: 0,
+  });
 
   // Handle search states
   const [activeMealSearch, setActiveMealSearch] = useState<number | null>(null);
   const [allFoodsSearchTerm, setAllFoodsSearchTerm] = useState("");
   const [showAllFoodsSearch, setShowAllFoodsSearch] = useState(false);
+
+  // Track Already Eaten Macro Collapsible State
+  const [eatenIsOpen, setEatenIsOpen] = React.useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const allFoodsSearchInputRef = useRef<HTMLInputElement>(null);
@@ -159,8 +179,9 @@ export default function MealPlanGenerator() {
   const clearMeals = () => {
     const newMeals = [
       { id: 1, name: "Breakfast", items: [] },
-      { id: 3, name: "Lunch", items: [] },
-      { id: 5, name: "Dinner", items: [] },
+      { id: 2, name: "Lunch", items: [] },
+      { id: 3, name: "Dinner", items: [] },
+      { id: 4, name: "Snacks", items: [] },
     ];
 
     const newFoods = { ...foods };
@@ -183,7 +204,9 @@ export default function MealPlanGenerator() {
       (i) => i.name === food.name
     );
     if (e.target.value) {
-      newMeals[mealIndex].items[itemIndex].servings = parseFloat(parseFloat(e.target.value).toFixed(2));
+      newMeals[mealIndex].items[itemIndex].servings = parseFloat(
+        parseFloat(e.target.value).toFixed(2)
+      );
     } else {
       delete newMeals[mealIndex].items[itemIndex].servings;
     }
@@ -239,25 +262,24 @@ export default function MealPlanGenerator() {
     meals.forEach((meal) => {
       meal.items.forEach((item) => {
         if (item.servings) {
+          const quantity =
+            item.usingFoodUnits && item.units && item.unit_name
+              ? item.servings / item.units
+              : item.servings;
 
-        const quantity =
-          item.usingFoodUnits && item.units && item.unit_name
-            ? item.servings / item.units
-            : item.servings;
-
-        totalCalories += item.calories * quantity;
-        totalProtein += item.protein * quantity;
-        totalCarbs += item.carbs * quantity;
-        totalFat += item.fat * quantity;
-        totalPrice += item.cost * quantity;
+          totalCalories += item.calories * quantity;
+          totalProtein += item.protein * quantity;
+          totalCarbs += item.carbs * quantity;
+          totalFat += item.fat * quantity;
+          totalPrice += item.cost * quantity;
         }
       });
     });
 
-    newRanges.Calories.total = totalCalories;
-    newRanges.Protein.total = totalProtein;
-    newRanges.Carbs.total = totalCarbs;
-    newRanges.Fat.total = totalFat;
+    newRanges.Calories.total = totalCalories + alreadyEaten.Calories;
+    newRanges.Protein.total = totalProtein + alreadyEaten.Protein;
+    newRanges.Carbs.total = totalCarbs + alreadyEaten.Carbs;
+    newRanges.Fat.total = totalFat + alreadyEaten.Fat;
     setRanges(newRanges);
     setPrice(totalPrice);
   }, [meals, ranges]);
@@ -400,11 +422,7 @@ export default function MealPlanGenerator() {
   };
 
   const setUsingFoodUnits = (item: FoodItem, meal: GeneratorList) => {
-    setGenerateType(
-      item,
-      meal,
-      GenerateType.KeepEqual
-    );
+    setGenerateType(item, meal, GenerateType.KeepEqual);
 
     const newMeals = [...meals];
     const newFoods = { ...foods };
@@ -414,8 +432,12 @@ export default function MealPlanGenerator() {
       (i) => i.name === item.name
     );
 
-    const servings = (newFoods[item.name].servings) ? newFoods[item.name].servings : 0;
-    const convertedServings = (!newFoods[item.name].usingFoodUnits) ? (newFoods[item.name].units as number) * (servings as number) : (servings as number) / (newFoods[item.name].units as number);
+    const servings = newFoods[item.name].servings
+      ? newFoods[item.name].servings
+      : 0;
+    const convertedServings = !newFoods[item.name].usingFoodUnits
+      ? (newFoods[item.name].units as number) * (servings as number)
+      : (servings as number) / (newFoods[item.name].units as number);
     const usingFoodUnits = newFoods[item.name].usingFoodUnits ? false : true;
 
     newMeals[mealIndex].items[itemIndex].servings = convertedServings;
@@ -499,6 +521,19 @@ export default function MealPlanGenerator() {
     setFoods(newFoods);
   };
 
+  const updateEaten = (
+    nutrient: GoalOptions,
+    event: React.ChangeEvent<HTMLSpanElement>
+  ) => {
+    const newTarget = parseFloat(event.target.value || "0");
+    if (!isNaN(newTarget)) {
+      const newRanges = { ...alreadyEaten };
+      newRanges[nutrient] = newTarget;
+      setAlreadyEaten(newRanges);
+      updateRanges();
+    }
+  };
+
   const updateTarget = (
     nutrient: GoalOptions,
     event: React.FocusEvent<HTMLSpanElement>,
@@ -519,11 +554,22 @@ export default function MealPlanGenerator() {
     }
   };
 
-  const getSegments = (quota: Range) => {
+  const getSegments = (quota: Range, key: GoalOptions) => {
+    const alreadyEatenValue = alreadyEaten[key];
     const segments = [];
+    segments.push({
+      value: Math.min(
+        (Math.min(alreadyEatenValue, quota.max) / quota.max) * 100,
+        100
+      ),
+      // color: (quota.total < quota.min) ? 'bg-yellow-500' : 'bg-neutral-500'
+      color: "bg-blue-500",
+    });
     if (quota.total > quota.min)
       segments.push({
-        value: (Math.min(quota.total, quota.max) / quota.max) * 100,
+        value:
+          (Math.min(quota.total, quota.max) / quota.max) *
+          100,
         color: quota.total < quota.max ? "bg-green-500" : "bg-red-500",
       });
     segments.push({
@@ -643,20 +689,20 @@ export default function MealPlanGenerator() {
       opType: "min",
       constraints: {
         calories: {
-          min: ranges.Calories.min,
-          max: ranges.Calories.max,
+          min: Math.max(ranges.Calories.min - alreadyEaten.Calories, 0),
+          max: Math.max(ranges.Calories.max - alreadyEaten.Calories, 0),
         },
         fat: {
-          min: ranges.Fat.min,
-          max: ranges.Fat.max,
+          min: Math.max(ranges.Fat.min - alreadyEaten.Fat, 0),
+          max: Math.max(ranges.Fat.max - alreadyEaten.Fat, 0),
         },
         carbs: {
-          min: ranges.Carbs.min,
-          max: ranges.Carbs.max,
+          min: Math.max(ranges.Carbs.min - alreadyEaten.Carbs, 0),
+          max: Math.max(ranges.Carbs.max - alreadyEaten.Carbs, 0),
         },
         protein: {
-          min: ranges.Protein.min,
-          max: ranges.Protein.max,
+          min: Math.max(ranges.Protein.min - alreadyEaten.Protein, 0),
+          max: Math.max(ranges.Protein.max - alreadyEaten.Protein, 0),
         },
       },
       variables: {},
@@ -668,14 +714,7 @@ export default function MealPlanGenerator() {
       lowestProteinCostHeuristic
     );
 
-    const display_groups = [
-      "Morning snack",
-      "Breakfast",
-      "Afternoon snack",
-      "Lunch",
-      "Evening snack",
-      "Dinner",
-    ];
+    const display_groups = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 
     for (const [food, food_data] of Object.entries(selectedFoods)) {
       // if (!food_data.enabled && !food_data.inMeal) continue; // Handeled in Preprocess
@@ -707,9 +746,9 @@ export default function MealPlanGenerator() {
           case GenerateType.KeepEqual: {
             if (!food_data.servings) break;
             const quantity =
-            food_data.usingFoodUnits && food_data.units && food_data.unit_name
-              ? food_data.servings / food_data.units
-              : food_data.servings;
+              food_data.usingFoodUnits && food_data.units && food_data.unit_name
+                ? food_data.servings / food_data.units
+                : food_data.servings;
 
             problem.constraints[food] = {
               equal: quantity,
@@ -774,12 +813,7 @@ export default function MealPlanGenerator() {
       return;
     }
 
-    const predefinedGroupOrder = [
-      "Breakfast",
-      "Lunch",
-      "Dinner",
-      "Snack",
-    ];
+    const predefinedGroupOrder = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 
     const foodsByGroup: { [key: string]: FoodItem[] } = {};
 
@@ -947,11 +981,100 @@ export default function MealPlanGenerator() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ScrollArea className="h-[600px] h-full pr-4">
+                    <Collapsible
+                      open={eatenIsOpen}
+                      onOpenChange={setEatenIsOpen}
+                      className="mb-4"
+                    >
+                      <div className="flex items-center mb-4">
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full items-center flex justify-between"
+                          >
+                            <h3 className="text-lg font-semibold text-neutral-700 dark:text-neutral-200 flex items-center">
+                              Already Eaten
+                            </h3>
+                            {eatenIsOpen ? (
+                              <ChevronUp className="flex h-4 w-4" />
+                            ) : (
+                              <ChevronDown className="flex h-4 w-4" />
+                            )}
+                            <span className="sr-only">Toggle</span>
+                          </Button>
+                        </CollapsibleTrigger>
+                      </div>
+                      <CollapsibleContent className="space-y-2">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div>
+                            <Label htmlFor="calories">Calories</Label>
+                            <Input
+                              type="number"
+                              id="calories"
+                              name="calories"
+                              value={alreadyEaten.Calories.toFixed(0)}
+                              onChange={(e) => updateEaten("Calories", e)}
+                              required
+                              min="0"
+                              placeholder="0"
+                              className="mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="carbs">Carbs (g)</Label>
+                            <Input
+                              type="number"
+                              id="carbs"
+                              name="carbs"
+                              value={alreadyEaten.Carbs}
+                              onChange={(e) => updateEaten("Carbs", e)}
+                              required
+                              min="0"
+                              step="0.1"
+                              placeholder="0"
+                              className="mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="fat">Fat (g)</Label>
+                            <Input
+                              type="number"
+                              id="fat"
+                              name="fat"
+                              value={alreadyEaten.Fat}
+                              onChange={(e) => updateEaten("Fat", e)}
+                              required
+                              min="0"
+                              step="0.1"
+                              placeholder="0"
+                              className="mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="protein">Protein (g)</Label>
+                            <Input
+                              type="number"
+                              id="protein"
+                              name="protein"
+                              value={alreadyEaten.Protein}
+                              onChange={(e) => updateEaten("Protein", e)}
+                              required
+                              min="0"
+                              step="0.1"
+                              placeholder="0"
+                              className="mt-1"
+                            />
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+
+                    <ScrollArea className="h-[600px] h-full">
                       {meals.map((meal) => (
                         <div key={meal.id} className="mb-6">
                           <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-semibold mb-4 text-neutral-700 dark:text-neutral-200   flex items-center">
+                            <h3 className="text-xl font-semibold text-neutral-700 dark:text-neutral-200 flex items-center">
                               <Utensils className="mr-2 h-5 w-5" />
                               {meal.name}
                             </h3>
@@ -1046,9 +1169,12 @@ export default function MealPlanGenerator() {
                                                       }
                                                       className="text-xs text-muted-foreground"
                                                     >
-                                                      {item.max_serving.toFixed(
-                                                        1
-                                                      )}
+                                                      {item.max_serving !=
+                                                      undefined
+                                                        ? item.max_serving.toFixed(
+                                                            1
+                                                          )
+                                                        : ""}
                                                     </div>
                                                     <div
                                                       contentEditable
@@ -1068,9 +1194,12 @@ export default function MealPlanGenerator() {
                                                       }
                                                       className="text-xs text-muted-foreground"
                                                     >
-                                                      {item.min_serving.toFixed(
-                                                        1
-                                                      )}
+                                                      {item.min_serving !=
+                                                      undefined
+                                                        ? item.min_serving.toFixed(
+                                                            1
+                                                          )
+                                                        : ""}
                                                     </div>
                                                   </div>
                                                 </TooltipTrigger>
@@ -1162,39 +1291,41 @@ export default function MealPlanGenerator() {
                                             g, Fat: {item.fat}g
                                           </div>
                                           <div className="flex items-center space-x-2">
-                                          {item.units && item.unit_name ? (
-                                            <Tooltip>
-                                              <TooltipTrigger asChild>
-                                                <Button
-                                                  size="icon"
-                                                  variant="outline"
-                                                  className="dark:bg-neutral-900"
-                                                  onClick={() =>
-                                                    setUsingFoodUnits(
-                                                      item,
-                                                      meal
-                                                    )
-                                                  }
-                                                >
-                                                  {!item.usingFoodUnits ? (
-                                                    <Pizza className="h-4 w-4" />
-                                                  ) : (
-                                                    <Ruler className="h-4 w-4" />
-                                                  )}
-                                                </Button>
-                                              </TooltipTrigger>
-                                              <TooltipContent>
-                                                <p>
-                                                  Pizza: Generate based on
-                                                  number of servings
-                                                </p>
-                                                <p>
-                                                  Ruler: Generate based on
-                                                  number of units (e.g. grams)
-                                                </p>
-                                              </TooltipContent>
-                                            </Tooltip>
-                                          ) : (<></>)}
+                                            {item.units && item.unit_name ? (
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <Button
+                                                    size="icon"
+                                                    variant="outline"
+                                                    className="dark:bg-neutral-900"
+                                                    onClick={() =>
+                                                      setUsingFoodUnits(
+                                                        item,
+                                                        meal
+                                                      )
+                                                    }
+                                                  >
+                                                    {!item.usingFoodUnits ? (
+                                                      <Pizza className="h-4 w-4" />
+                                                    ) : (
+                                                      <Ruler className="h-4 w-4" />
+                                                    )}
+                                                  </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                  <p>
+                                                    Pizza: Generate based on
+                                                    number of servings
+                                                  </p>
+                                                  <p>
+                                                    Ruler: Generate based on
+                                                    number of units (e.g. grams)
+                                                  </p>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            ) : (
+                                              <></>
+                                            )}
                                             <Tooltip>
                                               <TooltipTrigger asChild>
                                                 <Button
@@ -1566,7 +1697,7 @@ export default function MealPlanGenerator() {
                               </span>
                             </div>
                           </div>
-                          <Progress segments={getSegments(quotas)} />
+                          <Progress segments={getSegments(quotas, key)} />
                         </div>
                       ))}
                     </div>

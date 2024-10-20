@@ -523,6 +523,8 @@ export default function FoodsEditor() {
     if (foodType == FoodType.Recipe && recipeForm) {
       let items = recipeForm.ingredients;
 
+      if (Number.isNaN(recipeForm.makes_servings)) recipeForm.makes_servings = 1;
+
       items.forEach((item) => {
         const quantity =
           item.usingFoodUnits && item.item.units && item.item.unit_name
@@ -541,7 +543,7 @@ export default function FoodsEditor() {
       totalNutrition.fat /= recipeForm.makes_servings;
       totalNutrition.protein /= recipeForm.makes_servings;
 
-      setRecipeForm({
+    setRecipeForm({
         ...recipeForm,
         ...totalNutrition,
         ingredients: items,
